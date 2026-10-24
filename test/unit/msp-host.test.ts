@@ -284,6 +284,39 @@ describe("MspHost", () => {
     expect(fake.closeCount).toBe(1);
   });
 
+  test("mspHost.routesServerRequestsToARegisteredHandler", async () => {
+    const transport = new FakeMspTransport((request) => request.method === "initialize"
+      ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }
+      : {});
+    const fake = fakeHandshake(transport);
+    const seen: Array<{ method: string; params: Record<string, unknown> }> = [];
+    const host = await MspHost.start({
+      onServerRequest: async (request) => {
+        seen.push({ method: request.method, params: request.params ?? {} });
+        return { status: "received" };
+      },
+    }, { createHandshake: () => fake.handshake });
+    transport.deliver({
+      jsonrpc: "2.0",
+      id: 991,
+      method: "approval/request",
+      params: { sessionId: "ses-1", approvalId: "approval-1" },
+    });
+    for (let attempt = 0; attempt < 20 && !transport.writtenFrames.some((frame) =>
+      typeof frame === "object" && frame !== null && "id" in frame && (frame as { id: unknown }).id === 991,
+    ); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    const response = transport.writtenFrames.find((frame) =>
+      typeof frame === "object" && frame !== null && "id" in frame && (frame as { id: unknown }).id === 991,
+    ) as { result?: unknown; error?: unknown } | undefined;
+
+    expect(seen).toEqual([{ method: "approval/request", params: { sessionId: "ses-1", approvalId: "approval-1" } }]);
+    expect(response?.error).toBeUndefined();
+    expect(response?.result).toEqual({ status: "received" });
+    await host.close();
+  });
+
   test("mspHost.closeReportsFailureWithoutLeakingRuntimeText", async () => {
     const transport = new FakeMspTransport((request) => request.method === "initialize"
       ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }

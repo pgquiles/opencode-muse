@@ -19,6 +19,11 @@ export interface MspNotification {
   emittedAtMs?: number;
 }
 
+export interface MspServerRequest {
+  method: string;
+  params?: Record<string, unknown>;
+}
+
 export interface MspConnectionLike {
   readonly closed?: Promise<void>;
   command(
@@ -29,6 +34,7 @@ export interface MspConnectionLike {
   request(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>>;
   mintCommandId(): string;
   onNotification(handler: (notification: MspNotification) => void): void;
+  onServerRequest?(handler: (request: MspServerRequest) => Promise<Record<string, unknown>>): void;
   onProtocolError?(handler: (error: unknown) => void): void;
   close(): Promise<void>;
 }
@@ -37,6 +43,7 @@ export interface MspClientOptions {
   commandTimeoutMs?: number;
   requestTimeoutMs?: number;
   closeConnection?: boolean;
+  onServerRequest?: (request: MspServerRequest) => Promise<Record<string, unknown>>;
   onFatal?: () => void;
 }
 
@@ -154,6 +161,10 @@ export class MspClient {
     this.requestTimeoutMs = options.requestTimeoutMs ?? this.commandTimeoutMs;
     this.closeConnection = options.closeConnection ?? true;
     connection.onNotification((notification) => this.publish(notification));
+    if (options.onServerRequest) {
+      const handler = options.onServerRequest;
+      connection.onServerRequest?.((request) => handler(request));
+    }
     connection.onProtocolError?.(() => {
       if (this.observedProtocolFailure) return;
       this.observedProtocolFailure = new MspProtocolError();

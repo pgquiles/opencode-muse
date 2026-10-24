@@ -17,7 +17,7 @@ import {
   MspStartupTimeoutError,
   MspTransportError,
 } from "../errors.js";
-import { MspClient, type MspConnectionLike, type MspNotification } from "./client.js";
+import { MspClient, type MspConnectionLike, type MspNotification, type MspServerRequest } from "./client.js";
 
 export interface MspHostRuntime {
   connection: MspConnectionLike;
@@ -42,6 +42,7 @@ export interface MspHostOptions {
   shutdownTimeoutMs?: number;
   clientInfo?: { name: string; version: string };
   capabilities?: Parameters<MspHandshake["initialize"]>[0]["capabilities"];
+  onServerRequest?: (request: MspServerRequest) => Promise<Record<string, unknown>>;
 }
 
 export interface MspHostDependencies {
@@ -137,6 +138,7 @@ export class MspHost {
       commandTimeoutMs: options.commandTimeoutMs,
       requestTimeoutMs: options.requestTimeoutMs,
       closeConnection: false,
+      onServerRequest: options.onServerRequest,
       onFatal: () => {
         queueMicrotask(() => { void this.close().catch(() => {}); });
       },

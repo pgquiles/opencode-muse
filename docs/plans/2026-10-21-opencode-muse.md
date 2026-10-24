@@ -266,6 +266,8 @@ Create focused modules; adjust names only to match actual pinned SDK exports, an
 - [x] Keep the LanguageModelV3 bridge from emitting OpenCode tool calls. Narration and native file diffs remain unavailable pending a UI/runtime presentation gate.
 - [x] Do not run a live approval PAYG probe because the UI gate failed; Contributor mode is unchanged.
 
+**2026-10-24 addendum:** Re-inspection for #22 found the piece missing from the v1 gate analysis: OpenChamber's UI is generic (once/always/reject plus typed forms) and the plugin SDK exposes `permission.create` as ask-and-await. The v1 gate failed on *displaying* dynamic Muse choices; the #22 design never displays them — verdicts map onto offered choices, satisfying the exact-choice rule differently. The approval slice proceeds under #22 with sessions on `approvalMode: "onRequest"`; the forms slice (`userInput` → form request) remains pending.
+
 ### Task 14: Add safe auth UX and OpenChamber integration fallback
 
 **Gate result:** OpenChamber's current UI does not surface plugin command auth methods, and no exact billing/auth failure was verified on the pinned CLI. Do not add `src/auth.ts`, spawn `muse login` from OpenCode, or infer authentication from an empty session list. Use the official CLI manually and preserve generic typed Muse errors.
