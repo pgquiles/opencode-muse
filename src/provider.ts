@@ -98,6 +98,9 @@ export async function createProviderPlugin(
       input.language = createMuseLanguageModel({
         selectionIndex: catalog.selectionIndex,
         resolveSession: (context) => sessions.resolveSession(context),
+        settleApprovalResponses: (sessionID, responses) => sessions.settleApprovalResponses(sessionID, responses),
+        hasParkedApprovals: (sessionID) => sessions.hasParkedApprovals(sessionID),
+        disarmParkedJoin: (sessionID) => sessions.disarmParkedJoin(sessionID),
       }, input.model.modelID);
     }, { providerID: MUSE_PROVIDER_ID });
     localMetaRegistrations.push(await ctx.session.hook("title", async (input) => {

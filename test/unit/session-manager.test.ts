@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { SessionRegistry } from "../../src/session/registry.js";
 import { WorkspaceLock } from "../../src/session/workspace-lock.js";
 import { MuseSessionManager } from "../../src/session/manager.js";
-import { MspCommandTimeoutError, WorkspaceBusyError, MuseRecoveryChoiceRequiredError } from "../../src/errors.js";
+import { MspCommandTimeoutError, MuseApprovalPendingError, WorkspaceBusyError, MuseRecoveryChoiceRequiredError } from "../../src/errors.js";
+import { ApprovalExchange } from "../../src/msp/approvals.js";
 import type { RequestContext } from "../../src/types.js";
 
 const roots: string[] = [];
@@ -54,6 +55,7 @@ function managerAt(
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
   const hostOptions: Array<Record<string, unknown>> = [];
   const hosts: Array<{ closeCount: number }> = [];
+  const exchanges: ApprovalExchange[] = [];
   const registry = registryOverride ?? new SessionRegistry({ stateDirectory: root });
   const manager = new MuseSessionManager({
     stateDirectory: root,
@@ -63,9 +65,12 @@ function managerAt(
       hostOptions.push(options as unknown as Record<string, unknown>);
       const record = { closeCount: 0 };
       hosts.push(record);
+      const approvals = new ApprovalExchange({ timeoutMs: 50 });
+      exchanges.push(approvals);
       return {
         initializeResult: { sessionDurability: "durable" },
         mintCommandId: () => `018f4f17-9c2a-7c1a-a0fd-67a19db5d1${String(id++).padStart(2, "0")}`,
+        approvals,
         async command(method: string, params: Record<string, unknown>) {
           calls.push({ method, params });
           if (failSetModel && method === "session/setModel") {
@@ -94,7 +99,7 @@ function managerAt(
       } as never;
     },
   });
-  return { manager, calls, hosts, hostOptions };
+  return { manager, calls, hosts, hostOptions, exchanges };
 }
 
 describe("MuseSessionManager", () => {
@@ -370,6 +375,94 @@ describe("MuseSessionManager", () => {
 
     await expect(manager.resolveSession(context("ses_oc_1", directoryB)))
       .rejects.toThrow(/different workspace/);
+    await manager.close();
+  });
+
+  function parkApproval(exchange: ApprovalExchange, sessionId: string, turnId: string, approvalId = "approval-9") {
+    return exchange.requestApproval({
+      sessionId,
+      turnId,
+      approvalId,
+      currentRequirementId: "req-1",
+      availableChoices: [],
+      toolCallId: "call-9",
+    });
+  }
+
+  test("sessionManager.settlesApprovalResponsesAndArmsJoinForTheActiveTurn", async () => {
+    const root = tempRoot();
+    const { manager, calls, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = exchanges[0] as ApprovalExchange;
+    const parked = parkApproval(exchange, first.sessionId, "turn-1");
+    expect(exchange.pendingApprovalIds()).toEqual(["approval-9"]);
+
+    const matched = await manager.settleApprovalResponses("ses_oc_1", [{ approvalId: "approval-9", approved: true }]);
+    await parked;
+
+    expect(matched).toEqual(["approval-9"]);
+    expect(manager.hasParkedApprovals("ses_oc_1")).toBe(false);
+    expect(first.joinParkedTurnId).toBe("turn-1");
+
+    // The lease is still held by the parked call, so a re-acquire would fail;
+    // the join path must return the same binding without acquiring.
+    const second = await manager.resolveSession(context("ses_oc_1", directory));
+    expect(second).toBe(first);
+    expect(calls.filter((call) => call.method === "session/start")).toHaveLength(1);
+    await manager.close();
+  });
+
+  test("sessionManager.rejectsNewTurnsWhileAnApprovalIsParked", async () => {
+    const root = tempRoot();
+    const { manager, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    parkApproval(exchanges[0] as ApprovalExchange, first.sessionId, "turn-1");
+
+    await expect(manager.resolveSession(context("ses_oc_1", directory)))
+      .rejects.toBeInstanceOf(MuseApprovalPendingError);
+    await manager.close();
+  });
+
+  test("sessionManager.deliversStaleVerdictsForDeadTurnsWithoutArmingJoin", async () => {
+    const root = tempRoot();
+    const { manager, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = exchanges[0] as ApprovalExchange;
+    const parked = parkApproval(exchange, first.sessionId, "turn-1");
+    await first.recordTurnCompleted?.("turn-1", "completed");
+    void parked;
+
+    const matched = await manager.settleApprovalResponses("ses_oc_1", [{ approvalId: "approval-9", approved: true }]);
+
+    expect(matched).toEqual(["approval-9"]);
+    expect(first.joinParkedTurnId).toBeUndefined();
+    await manager.close();
+  });
+
+  test("sessionManager.disarmsJoinsThatCannotAttach", async () => {
+    const root = tempRoot();
+    const { manager, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const parked = parkApproval(exchanges[0] as ApprovalExchange, first.sessionId, "turn-1");
+    const matched = await manager.settleApprovalResponses("ses_oc_1", [{ approvalId: "approval-9", approved: true }]);
+    await parked;
+
+    expect(matched).toEqual(["approval-9"]);
+    expect(first.joinParkedTurnId).toBe("turn-1");
+    manager.disarmParkedJoin("ses_oc_1");
+    expect(first.joinParkedTurnId).toBeUndefined();
     await manager.close();
   });
 });

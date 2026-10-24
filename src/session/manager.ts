@@ -4,8 +4,11 @@ import { resolve } from "node:path";
 import type { MspHandshake } from "@muse-code/sdk";
 import type { RequestContext } from "../types.js";
 import { MspHost } from "../msp/host.js";
+import type { ApprovalExchange } from "../msp/approvals.js";
+import type { ApprovalResponse } from "../model/prompt.js";
 import {
   MspCommandRejectedError,
+  MuseApprovalPendingError,
   MuseRecoveryChoiceRequiredError,
   MuseUnsupportedRequestError,
   RegistryWorkspaceMismatchError,
@@ -16,7 +19,7 @@ import type { LockLease, WorkspaceLock } from "./workspace-lock.js";
 import type { MuseTurnSession } from "../model/language-model.js";
 import type { AgentContextResult } from "../model/agent-context.js";
 
-export interface MuseSessionHost extends Pick<MspHost, "command" | "request" | "subscribe" | "mintCommandId" | "close"> {
+export interface MuseSessionHost extends Pick<MspHost, "command" | "request" | "subscribe" | "mintCommandId" | "close" | "approvals"> {
   initializeResult: Record<string, unknown>;
 }
 
@@ -29,7 +32,8 @@ export interface MuseSessionManagerOptions {
   videoChunkBytes?: number;
 }
 
-interface ManagedBinding extends MuseTurnSession {
+interface ManagedBinding extends Omit<MuseTurnSession, "host"> {
+  host: MuseSessionHost;
   workspaceFingerprint: string;
   museSessionId: string;
   hostId: string;
@@ -38,6 +42,8 @@ interface ManagedBinding extends MuseTurnSession {
   compactionFingerprints: string[];
   pendingCommands: Record<string, PendingCommandRecord>;
   activeTurnId?: string;
+  /** Set when the next call must attach to this parked Muse turn. */
+  joinParkedTurnId?: string;
   currentSelection: { providerId: string; modelId: string; profileId: string | null };
   lease?: LockLease;
 }
@@ -118,6 +124,16 @@ export class MuseSessionManager {
       throw new RegistryWorkspaceMismatchError();
     }
 
+    if (existingBinding?.joinParkedTurnId !== undefined) {
+      // The settled verdicts matched a parked turn: attach to it instead of
+      // starting a new one. The parked call still holds the lease; the
+      // handoff flag tells it to detach without releasing.
+      return existingBinding;
+    }
+    if (existingBinding && existingBinding.host.approvals.pendingApprovalIds().length > 0) {
+      throw new MuseApprovalPendingError();
+    }
+
     const lease = await this.options.workspaceLock.acquire(fingerprint, context.sessionID);
     let host: MuseSessionHost | undefined;
     try {
@@ -190,6 +206,8 @@ export class MuseSessionManager {
         workspaceFingerprint: fingerprint,
         viewCursor,
         replayAfterCursor,
+        emittedApprovalPrompts: new Set<string>(),
+        streamEpoch: 0,
         currentSelection: initialSelection,
         previousTranscriptFingerprints: stored?.transcriptFingerprints ?? [],
         transcriptFingerprints: stored?.transcriptFingerprints ?? [],
@@ -232,10 +250,18 @@ export class MuseSessionManager {
           binding.activeTurnId = undefined;
           binding.replayAfterCursor = undefined;
           binding.pendingCommands = {};
+          binding.joinParkedTurnId = undefined;
+          binding.handoffLeaseToJoiner = false;
+          binding.emittedApprovalPrompts = new Set<string>();
           try { await persist(); } catch (error) {
             binding.activeTurnId = previousActive;
             binding.pendingCommands = previousPending;
             throw error;
+          }
+        },
+        async cancelParkedApprovals() {
+          for (const approvalId of binding.host.approvals.pendingApprovalIds()) {
+            binding.host.approvals.settle(approvalId, false);
           }
         },
         async release() {
@@ -274,6 +300,52 @@ export class MuseSessionManager {
       if (host) await host.close().catch(() => {});
       throw error;
     }
+  }
+
+  /**
+   * Route OpenCode's answers to previously emitted `tool-approval-request`
+   * chunks into the parked MSP approval round trips. Returns the approval
+   * ids that matched a still-parked approval. When a matched approval
+   * belongs to the binding's active turn, the next `resolveSession` call
+   * attaches to that turn instead of starting a new one.
+   */
+  async settleApprovalResponses(openCodeSessionId: string, responses: ApprovalResponse[]): Promise<string[]> {
+    const binding = this.bindings.get(openCodeSessionId);
+    if (!binding) return [];
+    const matched: string[] = [];
+    let joinTurnId: string | undefined;
+    for (const response of responses) {
+      // Capture the parked turn before settle clears the pending entry.
+      const parkedTurnId = binding.host.approvals.pendingApprovalTurnId(response.approvalId);
+      if (parkedTurnId === undefined) continue;
+      if (!binding.host.approvals.settle(response.approvalId, response.approved)) continue;
+      matched.push(response.approvalId);
+      // Arm the join only for verdicts that belong to the still-active turn;
+      // a verdict for a dead turn is delivered but never joined.
+      if (joinTurnId === undefined && parkedTurnId === binding.activeTurnId) joinTurnId = parkedTurnId;
+    }
+    if (joinTurnId !== undefined) {
+      binding.joinParkedTurnId = joinTurnId;
+      binding.streamEpoch = (binding.streamEpoch ?? 0) + 1;
+      binding.handoffLeaseToJoiner = true;
+    }
+    return matched;
+  }
+
+  /** True while the binding's active turn is parked awaiting a verdict. */
+  hasParkedApprovals(openCodeSessionId: string): boolean {
+    const binding = this.bindings.get(openCodeSessionId);
+    return binding !== undefined
+      && binding.activeTurnId !== undefined
+      && binding.host.approvals.pendingApprovalIds().length > 0;
+  }
+
+  /** Drop a join that can no longer attach (diverged prompt, failed start). */
+  disarmParkedJoin(openCodeSessionId: string): void {
+    const binding = this.bindings.get(openCodeSessionId);
+    if (!binding) return;
+    binding.joinParkedTurnId = undefined;
+    binding.handoffLeaseToJoiner = false;
   }
 
   async close(): Promise<void> {

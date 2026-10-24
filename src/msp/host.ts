@@ -18,6 +18,7 @@ import {
   MspTransportError,
 } from "../errors.js";
 import { MspClient, type MspConnectionLike, type MspNotification, type MspServerRequest } from "./client.js";
+import { ApprovalExchange, selectApprovalChoiceId, type ApprovalVerdict } from "./approvals.js";
 
 export interface MspHostRuntime {
   connection: MspConnectionLike;
@@ -43,6 +44,9 @@ export interface MspHostOptions {
   clientInfo?: { name: string; version: string };
   capabilities?: Parameters<MspHandshake["initialize"]>[0]["capabilities"];
   onServerRequest?: (request: MspServerRequest) => Promise<Record<string, unknown>>;
+  approvalTimeoutMs?: number;
+  onApprovalParked?: (info: { museTurnId: string; approvalId: string }) => void;
+  onApprovalUnparked?: (approvalId: string) => void;
 }
 
 export interface MspHostDependencies {
@@ -123,9 +127,13 @@ export class MspHost {
   readonly initializeResult: Record<string, unknown>;
   /** Set when the served schema fingerprint differs from the SDK pin. Warns, never blocks. */
   readonly fingerprintWarning?: FingerprintWarning;
+  /** Per-session latch for approval round trips; settled by OpenCode verdicts. */
+  readonly approvals: ApprovalExchange;
   readonly exited: Promise<MspHostExit>;
   private state: "open" | "closing" | "closed" = "open";
   private closePromise: Promise<void> | undefined;
+  private readonly onApprovalParked: MspHostOptions["onApprovalParked"];
+  private readonly onApprovalUnparked: MspHostOptions["onApprovalUnparked"];
 
   private constructor(
     private readonly runtime: MspHostRuntime,
@@ -134,11 +142,17 @@ export class MspHost {
   ) {
     this.initializeResult = runtime.initializeResult;
     this.fingerprintWarning = fingerprintWarning;
+    this.approvals = new ApprovalExchange({ timeoutMs: options.approvalTimeoutMs ?? 10 * 60 * 1000 });
+    this.onApprovalParked = options.onApprovalParked;
+    this.onApprovalUnparked = options.onApprovalUnparked;
+    const customServerRequest = options.onServerRequest;
     this.client = new MspClient(runtime.connection, {
       commandTimeoutMs: options.commandTimeoutMs,
       requestTimeoutMs: options.requestTimeoutMs,
       closeConnection: false,
-      onServerRequest: options.onServerRequest,
+      onServerRequest: customServerRequest
+        ? (request) => customServerRequest(request)
+        : (request) => this.handleServerRequest(request),
       onFatal: () => {
         queueMicrotask(() => { void this.close().catch(() => {}); });
       },
@@ -241,6 +255,65 @@ export class MspHost {
   subscribe(sessionId: string, after?: string, signal?: AbortSignal): AsyncIterable<MspNotification> {
     if (this.state !== "open") throw new MspHostClosedError();
     return this.client.subscribe(sessionId, after, signal);
+  }
+
+  private async handleServerRequest(request: MspServerRequest): Promise<Record<string, unknown>> {
+    if (request.method === "approval/request") return this.handleApprovalRequest(request.params);
+    // Mirror the SDK's own client: answered methods ack with {}; every other
+    // server-request method keeps the bare-connection -32601.
+    throw new MspError({
+      code: -32601,
+      message: `method not found: ${request.method}`,
+      data: { kind: "methodNotFound", retryable: false },
+    });
+  }
+
+  private async handleApprovalRequest(params: Record<string, unknown> | undefined): Promise<Record<string, unknown>> {
+    let verdict: ApprovalVerdict;
+    try {
+      const pending = this.approvals.requestApproval(params);
+      const raw = (params ?? {}) as { approvalId?: unknown; turnId?: unknown };
+      if (
+        typeof raw.approvalId === "string" && typeof raw.turnId === "string"
+        && this.approvals.pendingApprovalIds().includes(raw.approvalId)
+      ) {
+        this.onApprovalParked?.({ museTurnId: raw.turnId, approvalId: raw.approvalId });
+      }
+      verdict = await pending;
+    } catch {
+      // Unroutable (malformed) approval requests are dropped like the SDK
+      // drops them; the server holds the turn under its own default-deny.
+      return {};
+    }
+    if ("alreadyDecided" in verdict) return {};
+    const stage = verdict.params;
+    const choiceId = selectApprovalChoiceId(stage.availableChoices, verdict.approved)
+      ?? (verdict.approved ? selectApprovalChoiceId(stage.availableChoices, false) : null);
+    try {
+      if (choiceId !== null) {
+        await this.command("approval/decide", {
+          commandId: this.client.mintCommandId(),
+          sessionId: stage.sessionId,
+          approvalId: stage.approvalId,
+          requirementId: stage.currentRequirementId,
+          choiceId,
+        });
+      } else {
+        await this.command("turn/interrupt", {
+          commandId: this.client.mintCommandId(),
+          sessionId: stage.sessionId,
+          turnId: stage.turnId,
+          retract: true,
+        });
+      }
+    } catch {
+      // The turn may already be gone (cancel raced the verdict). Mark the
+      // stage so a re-sent request does not re-park a dead round trip; the
+      // request plane is still acked.
+    }
+    this.approvals.markDecided(stage.approvalId, stage.currentRequirementId);
+    this.onApprovalUnparked?.(stage.approvalId);
+    return {};
   }
 
   close(): Promise<void> {

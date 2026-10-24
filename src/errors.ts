@@ -16,7 +16,8 @@ export type MuseBridgeErrorCode =
   | "MUSE_UNSUPPORTED_REQUEST"
   | "MUSE_UNSUPPORTED_INPUT"
   | "MUSE_RECOVERY_CHOICE_REQUIRED"
-  | "MUSE_TRANSCRIPT_DIVERGED";
+  | "MUSE_TRANSCRIPT_DIVERGED"
+  | "MUSE_APPROVAL_PENDING";
 
 /** Safe plugin error: never attach raw CLI stderr, MSP text, prompts, or payloads. */
 export class MuseBridgeError extends Error {
@@ -192,5 +193,12 @@ export class MuseTranscriptDivergedError extends MuseBridgeError {
   constructor() {
     super("MUSE_TRANSCRIPT_DIVERGED", "OpenCode history diverged from the mapped Muse session; start a fresh Muse session or recover it explicitly", false);
     this.name = "MuseTranscriptDivergedError";
+  }
+}
+
+export class MuseApprovalPendingError extends MuseBridgeError {
+  constructor() {
+    super("MUSE_APPROVAL_PENDING", "Muse turn is parked awaiting an approval verdict; answer the pending prompt first", true);
+    this.name = "MuseApprovalPendingError";
   }
 }

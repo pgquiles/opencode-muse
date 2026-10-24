@@ -59,6 +59,15 @@ function fakeRuntime(options: {
   previousTranscriptFingerprints?: string[];
   compactionFingerprints?: string[];
   contextError?: string;
+  joinParkedTurnId?: string;
+  onDisarm?: () => void;
+  streamEpoch?: number;
+  handoffLeaseToJoiner?: boolean;
+  emittedApprovalPrompts?: Set<string>;
+  onCancelParked?: () => void;
+  settleMatched?: string[];
+  hasParkedApprovals?: boolean;
+  gateEventsAfter?: { count: number; release: Promise<void> };
 } = {}) {
   const commands: Array<{ method: string; params: Record<string, unknown> }> = [];
   const requests: Array<{ method: string; params?: Record<string, unknown> }> = [];
@@ -111,8 +120,15 @@ function fakeRuntime(options: {
       return {
         async *[Symbol.asyncIterator]() {
           try {
+            let index = 0;
+            let gated = false;
             for (const notification of options.events ?? []) {
+              if (!gated && options.gateEventsAfter && index >= options.gateEventsAfter.count) {
+                gated = true;
+                await options.gateEventsAfter.release;
+              }
               yield notification;
+              index += 1;
               if (notification.method === "turn/foregroundCompleted" && options.backgroundWaitAfterForeground) {
                 await options.backgroundWaitAfterForeground;
               }
@@ -136,6 +152,11 @@ function fakeRuntime(options: {
     compactionFingerprints: options.compactionFingerprints ?? [],
     contextAllowlist: [],
     contextError: options.contextError,
+    joinParkedTurnId: options.joinParkedTurnId,
+    streamEpoch: options.streamEpoch,
+    handoffLeaseToJoiner: options.handoffLeaseToJoiner,
+    emittedApprovalPrompts: options.emittedApprovalPrompts,
+    ...(options.onCancelParked ? { cancelParkedApprovals: async () => { options.onCancelParked?.(); } } : {}),
     async recordPendingCommand(command: { commandId: string; method: string }) {
       pendingCommandMethods.set(command.commandId, command.method);
       commandLifecycle.push(`pending:${command.method}`);
@@ -160,18 +181,33 @@ function fakeRuntime(options: {
     } : {}),
     async release() { released += 1; markReleased(); },
   };
+  const settledResponses: Array<{ sessionID: string; responses: Array<{ approvalId: string; approved: boolean }> }> = [];
   const runtime: MuseLanguageRuntime = {
     selectionIndex,
     videoChunkBytes: options.videoChunkBytes,
     async resolveSession() { return session as unknown as MuseTurnSession; },
+    ...(options.settleMatched !== undefined ? {
+      async settleApprovalResponses(sessionID: string, responses: Array<{ approvalId: string; approved: boolean }>) {
+        settledResponses.push({ sessionID, responses });
+        return options.settleMatched ?? [];
+      },
+    } : {}),
+    ...(options.hasParkedApprovals !== undefined ? {
+      hasParkedApprovals() { return options.hasParkedApprovals ?? false; },
+    } : {}),
+    ...(options.onDisarm ? {
+      disarmParkedJoin() { options.onDisarm?.(); },
+    } : {}),
   };
   return {
     runtime,
+    session,
     commands,
     requests,
     commandLifecycle,
     order,
     cursorUpdates,
+    settledResponses,
     get released() { return released; },
     releasedPromise,
     get subscriptionReturns() { return subscriptionReturns; },
@@ -770,5 +806,175 @@ describe("Muse LanguageModelV3 bridge", () => {
     await model.doGenerate(callOptions({ abortSignal: controller.signal }));
     expect(fake.commands.some((command) => command.method === "turn/interrupt")).toBe(true);
     expect(fake.commands.some((command) => command.method === "turn/unqueue")).toBe(false);
+  });
+
+  const approvalResponsePrompt = () => [{
+    role: "user",
+    content: [
+      { type: "tool-approval-response", approvalId: "approval-1", approved: true },
+      { type: "text", text: "go on" },
+    ],
+  }];
+
+  test("languageModel.doStreamJoinsParkedTurnOnApprovalResponse", async () => {
+    const fake = fakeRuntime({
+      events: [
+        event("item/started", { sessionId: "ses_model_test", item: { itemId: "msg-1", turnId: "turn-parked", kind: "agentMessage" } }),
+        event("item/delta", { sessionId: "ses_model_test", itemId: "msg-1", field: "text", delta: "resumed" }),
+        event("item/completed", { sessionId: "ses_model_test", item: { itemId: "msg-1", turnId: "turn-parked", kind: "agentMessage", status: "completed", text: "resumed" } }),
+        event("turn/completed", { sessionId: "ses_model_test", turnId: "turn-parked", terminal: "completed" }),
+      ],
+      settleMatched: ["approval-1"],
+      joinParkedTurnId: "turn-parked",
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions({ prompt: approvalResponsePrompt() }));
+    const reader = result.stream.getReader();
+    const parts: Array<Record<string, unknown>> = [];
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      parts.push(next.value as unknown as Record<string, unknown>);
+    }
+
+    expect(fake.settledResponses).toEqual([{
+      sessionID: "ses_model_test",
+      responses: [{ approvalId: "approval-1", approved: true }],
+    }]);
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+    expect(parts.map((part) => part.type)).toEqual(["stream-start", "text-start", "text-delta", "text-end", "finish"]);
+    await fake.releasedPromise;
+    expect(fake.released).toBe(1);
+  });
+
+  test("languageModel.doStreamThrowsWhenApprovalResponsesCannotBeSettled", async () => {
+    const fake = fakeRuntime({ hasParkedApprovals: true });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+
+    await expect(model.doStream(callOptions({ prompt: approvalResponsePrompt() })))
+      .rejects.toThrow(/approval-response/);
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+  });
+
+  test("languageModel.doGenerateRefusesApprovalResponsesWhileAnApprovalIsParked", async () => {
+    const fake = fakeRuntime({ events: textEvents(), hasParkedApprovals: true });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+
+    await expect(model.doGenerate(callOptions({ prompt: approvalResponsePrompt() })))
+      .rejects.toThrow(/approval-response/);
+    expect(fake.settledResponses).toEqual([]);
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+  });
+
+  test("languageModel.doGenerateSettlesStaleResponsesAndStartsAFreshTurn", async () => {
+    const fake = fakeRuntime({ events: textEvents(), settleMatched: [], hasParkedApprovals: false });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doGenerate(callOptions({ prompt: approvalResponsePrompt() }));
+
+    expect(fake.settledResponses).toEqual([{
+      sessionID: "ses_model_test",
+      responses: [{ approvalId: "approval-1", approved: true }],
+    }]);
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(true);
+    expect(result.content).toEqual([{ type: "text", text: "Probe answer" }]);
+  });
+
+  test("languageModel.supersededStreamClosesWithoutReleasingTheLease", async () => {
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseGate = resolve; });
+    const fake = fakeRuntime({
+      events: [
+        event("turn/started", { sessionId: "ses_model_test", turnId: "turn-1" }),
+        event("approval/requested", {
+          sessionId: "ses_model_test",
+          turnId: "turn-1",
+          approvalId: "approval-1",
+          currentRequirementId: "req-1",
+          toolCallId: "call-1",
+        }),
+        event("item/started", { sessionId: "ses_model_test", item: { itemId: "msg-1", turnId: "turn-1", kind: "agentMessage" } }),
+        event("turn/completed", { sessionId: "ses_model_test", turnId: "turn-1", terminal: "completed" }),
+      ],
+      streamEpoch: 7,
+      gateEventsAfter: { count: 2, release: gate },
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const reader = result.stream.getReader();
+    const parts: Array<Record<string, unknown>> = [];
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      parts.push(next.value as unknown as Record<string, unknown>);
+      if (parts.some((part) => part.type === "tool-approval-request")) break;
+    }
+
+    expect(parts.map((part) => part.type)).toEqual(["stream-start", "tool-approval-request"]);
+    fake.session.streamEpoch = 8;
+    fake.session.handoffLeaseToJoiner = true;
+    releaseGate();
+    while (!(await reader.read()).done) {
+      // Drain until the superseded stream closes.
+    }
+
+    expect(fake.released).toBe(0);
+    expect(fake.commands.some((command) => command.method === "turn/interrupt")).toBe(false);
+  });
+
+  test("languageModel.cancelAfterHandoffDoesNotInterruptTheJoinedTurn", async () => {
+    const fake = fakeRuntime({ blockSubscription: true });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    for (let attempt = 0; attempt < 50 && !fake.commands.some((command) => command.method === "turn/start"); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    // The manager hands the lease to the joining call mid-turn.
+    fake.session.handoffLeaseToJoiner = true;
+    await result.stream.getReader().cancel();
+
+    expect(fake.commands.some((command) => command.method === "turn/interrupt")).toBe(false);
+    expect(fake.released).toBe(0);
+  });
+
+  test("languageModel.divergenceDuringJoinDisarmsWithoutStartingATurn", async () => {
+    let disarmed = 0;
+    const fake = fakeRuntime({
+      previousTranscriptFingerprints: ["a".repeat(64)],
+      settleMatched: ["approval-1"],
+      joinParkedTurnId: "turn-parked",
+      onDisarm: () => { disarmed += 1; },
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const error = await model.doStream(callOptions({
+      prompt: [
+        { role: "user", content: [{ type: "text", text: "edited earlier turn" }] },
+        { role: "assistant", content: [{ type: "text", text: "old assistant" }] },
+        {
+          role: "user",
+          content: [
+            { type: "tool-approval-response", approvalId: "approval-1", approved: true },
+            { type: "text", text: "latest" },
+          ],
+        },
+      ],
+    })).then(() => undefined, (reason: unknown) => reason as Error);
+
+    expect(error?.name).toBe("MuseTranscriptDivergedError");
+    expect(disarmed).toBe(1);
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+  });
+
+  test("languageModel.cancelWhileParkedDeniesThePendingApproval", async () => {
+    let denied = 0;
+    const fake = fakeRuntime({
+      blockSubscription: true,
+      onCancelParked: () => { denied += 1; },
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    await result.stream.getReader().cancel();
+
+    expect(denied).toBe(1);
+    expect(fake.commands.some((command) => command.method === "turn/interrupt")).toBe(true);
   });
 });

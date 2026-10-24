@@ -210,6 +210,33 @@ export function extractTurnInput(
   return { ok: true, parts, nextTranscriptFingerprints: currentFingerprints };
 }
 
+export interface ApprovalResponse {
+  approvalId: string;
+  approved: boolean;
+}
+
+/**
+ * Collect OpenCode's answers to previously emitted `tool-approval-request`
+ * chunks. Malformed entries are ignored; the caller treats an unmatched
+ * response as stale and drops it rather than failing the turn.
+ */
+export function extractApprovalResponses(prompt: LanguageModelV3Prompt): ApprovalResponse[] {
+  const responses: ApprovalResponse[] = [];
+  for (const message of prompt) {
+    if (message.role !== "user") continue;
+    const content = (message as { content?: unknown }).content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (typeof part !== "object" || part === null) continue;
+      const candidate = part as Record<string, unknown>;
+      if (candidate.type !== "tool-approval-response") continue;
+      if (typeof candidate.approvalId !== "string" || typeof candidate.approved !== "boolean") continue;
+      responses.push({ approvalId: candidate.approvalId, approved: candidate.approved });
+    }
+  }
+  return responses;
+}
+
 export function validateModelOptions(options: ModelOptionsInput): ModelOptionsResult {
   if (options.responseFormat?.type === "json") {
     return { ok: false, error: inputError("unsupported-response-format", { field: "responseFormat" }) };

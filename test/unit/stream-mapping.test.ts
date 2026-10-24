@@ -183,4 +183,71 @@ describe("Muse → LanguageModelV3 stream mapping", () => {
     expect(JSON.stringify(parts)).not.toContain("private");
     expect(parts[0]?.error).toMatchObject({ turnErrorKind: "unknown" });
   });
+
+  test("stream.emitsAToolApprovalRequestForAnApprovalRequestedNotification", () => {
+    const mapper = new MuseStreamMapper("turn-1");
+    const parts = mapper.accept(event("approval/requested", {
+      sessionId: "ses-1",
+      turnId: "turn-1",
+      approvalId: "approval-1",
+      currentRequirementId: "req-1",
+      toolCallId: "call-1",
+      toolName: "shell",
+    }));
+    expect(parts).toEqual([{
+      type: "tool-approval-request",
+      approvalId: "approval-1",
+      toolCallId: "call-1",
+      providerMetadata: { muse: { toolName: "shell" } },
+    }]);
+  });
+
+  test("stream.omitsToolNameMetadataWhenTheNotificationCarriesNone", () => {
+    const mapper = new MuseStreamMapper("turn-1");
+    const parts = mapper.accept(event("approval/requested", {
+      sessionId: "ses-1",
+      approvalId: "approval-1",
+      toolCallId: "call-1",
+    }));
+    expect(parts).toEqual([{ type: "tool-approval-request", approvalId: "approval-1", toolCallId: "call-1" }]);
+  });
+
+  test("stream.ignoresMalformedApprovalRequestsWithoutEmitting", () => {
+    const mapper = new MuseStreamMapper("turn-1");
+    expect(mapper.accept(event("approval/requested", { sessionId: "ses-1" }))).toEqual([]);
+    expect(mapper.accept(event("approval/requested", {
+      sessionId: "ses-1",
+      approvalId: "approval-1",
+    }))).toEqual([]);
+  });
+
+  test("stream.emitsEachApprovalStageOnceAcrossMapperInstances", () => {
+    const emitted = new Set<string>();
+    const first = new MuseStreamMapper("turn-1", emitted);
+    expect(first.accept(event("approval/requested", {
+      sessionId: "ses-1",
+      approvalId: "approval-1",
+      currentRequirementId: "req-1",
+      toolCallId: "call-1",
+    }))).toHaveLength(1);
+    expect(first.accept(event("approval/requested", {
+      sessionId: "ses-1",
+      approvalId: "approval-1",
+      currentRequirementId: "req-1",
+      toolCallId: "call-1",
+    }))).toEqual([]);
+    const second = new MuseStreamMapper("turn-1", emitted);
+    expect(second.accept(event("approval/requested", {
+      sessionId: "ses-1",
+      approvalId: "approval-1",
+      currentRequirementId: "req-1",
+      toolCallId: "call-1",
+    }))).toEqual([]);
+    expect(second.accept(event("approval/requested", {
+      sessionId: "ses-1",
+      approvalId: "approval-1",
+      currentRequirementId: "req-2",
+      toolCallId: "call-1",
+    }))).toHaveLength(1);
+  });
 });

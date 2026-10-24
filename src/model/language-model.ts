@@ -11,8 +11,10 @@ import { MUSE_CONTEXT_HEADERS, readRequestContext } from "./context.js";
 import { classifyMetaRequest, makeCompactionDigest, makeLocalTitle, type MetaRequestClass } from "./meta.js";
 import { promptContainsCompactionFingerprint } from "../session/fingerprint.js";
 import {
+  extractApprovalResponses,
   extractTurnInput,
   validateModelOptions,
+  type ApprovalResponse,
   type ContextFragment,
   type ExtractedTurnPart,
 } from "./prompt.js";
@@ -49,12 +51,25 @@ export interface MuseTurnSession {
   updateCursor?(cursor: string): Promise<void>;
   recordTurnCompleted?(turnId: string, terminal: string, usage?: Record<string, unknown>): Promise<void>;
   release?(): Promise<void>;
+  /** Cross-turn chunk dedup for approval prompts; shared per OpenCode session. */
+  emittedApprovalPrompts?: Set<string>;
+  /** Set by the session manager when this call must attach to a parked turn. */
+  joinParkedTurnId?: string;
+  /** Bumped by the manager when a newer call takes over this session's output. */
+  streamEpoch?: number;
+  /** When true, the lease already moved to the joining call: detach, never interrupt or release. */
+  handoffLeaseToJoiner?: boolean;
+  /** Settle every still-pending approval verdict as denied (cancel path). */
+  cancelParkedApprovals?(): Promise<void> | void;
 }
 
 export interface MuseLanguageRuntime {
   selectionIndex: ReadonlyMap<string, MuseModelSelection>;
   resolveSession(context: RequestContext): Promise<MuseTurnSession>;
   videoChunkBytes?: number;
+  settleApprovalResponses?(sessionID: string, responses: ApprovalResponse[]): Promise<string[]>;
+  hasParkedApprovals?(sessionID: string): boolean | Promise<boolean>;
+  disarmParkedJoin?(sessionID: string): void;
 }
 
 export interface MuseTurnExecution {
@@ -220,56 +235,86 @@ export async function runMuseTurn(
   let subscription: AsyncIterator<MspNotification> | undefined;
   let firstNotification: Promise<IteratorResult<MspNotification>> | undefined;
   let subscriptionController: AbortController | undefined;
+  const joinTurnId = session.joinParkedTurnId;
+  session.joinParkedTurnId = undefined;
+  const joinedTurn = joinTurnId !== undefined;
+  if (!joinedTurn) {
+    // A fresh turn starts a new ownership epoch; stale handoff markers die here.
+    session.handoffLeaseToJoiner = false;
+  }
 
   const cancel = () => {
     if (cancelPromise) return cancelPromise;
+    // A superseded stream detaches silently: the joining call owns the turn now.
+    if (!joinedTurn && session.handoffLeaseToJoiner) return Promise.resolve();
+    const denyParked = async () => {
+      try {
+        await session.cancelParkedApprovals?.();
+      } catch {
+        // The verdict latch settles denied on its own timeout; a cancel-time
+        // settle failure must not mask the interrupt below.
+      }
+    };
     if (!turnId || !disposition) {
       abortRequested = true;
-      return Promise.resolve();
+      return denyParked();
     }
     const unqueue = disposition === "queued";
     const method = unqueue ? "turn/unqueue" : "turn/interrupt";
     const params = unqueue
       ? { sessionId: session.sessionId, turnId }
       : { sessionId: session.sessionId, turnId, retract: true };
-    cancelPromise = submitCommand(session, method, session.host.mintCommandId(), params).then(() => {});
+    cancelPromise = denyParked().then(() =>
+      submitCommand(session, method, session.host.mintCommandId(), params).then(() => {}),
+    );
     return cancelPromise;
   };
   const onAbort = () => { abortRequested = true; void cancel().catch(() => {}); };
   options.abortSignal?.addEventListener("abort", onAbort, { once: true });
 
   try {
-    if (!sameSelection(session.currentSelection, context.museSelection)) {
-      const model: Record<string, unknown> = {
-        providerId: context.museSelection.providerId,
-        modelId: context.museSelection.modelId,
-      };
-      if (context.museSelection.profileId !== null) model.profileId = context.museSelection.profileId;
-      await submitCommand(session, "session/setModel", session.host.mintCommandId(), {
-        sessionId: session.sessionId,
-        model,
-      });
-    }
+    const turnCommandId = session.host.mintCommandId();
+    if (joinedTurn) {
+      // Attach to the parked turn: no turn/start, no model switch, no
+      // acceptance record. The settled verdict already resumed it server-side.
+      turnId = joinTurnId;
+      disposition = "joined";
+      subscriptionController = new AbortController();
+      subscription = session.host.subscribe(session.sessionId, session.replayAfterCursor, subscriptionController.signal)[Symbol.asyncIterator]();
+      firstNotification = subscription.next();
+      accepted = true;
+    } else {
+      if (!sameSelection(session.currentSelection, context.museSelection)) {
+        const model: Record<string, unknown> = {
+          providerId: context.museSelection.providerId,
+          modelId: context.museSelection.modelId,
+        };
+        if (context.museSelection.profileId !== null) model.profileId = context.museSelection.profileId;
+        await submitCommand(session, "session/setModel", session.host.mintCommandId(), {
+          sessionId: session.sessionId,
+          model,
+        });
+      }
 
-    const inputParts = await mapVideoParts(session, input, options.abortSignal, runtime.videoChunkBytes);
-    if (options.abortSignal?.aborted) throw new DOMException("Muse request aborted before turn start", "AbortError");
-    subscriptionController = new AbortController();
-    subscription = session.host.subscribe(session.sessionId, session.replayAfterCursor, subscriptionController.signal)[Symbol.asyncIterator]();
-    firstNotification = subscription.next();
-    const commandId = session.host.mintCommandId();
-    const params: Record<string, unknown> = {
-      sessionId: session.sessionId,
-      input: inputParts,
-    };
-    if (context.effort) params.reasoningEffort = context.effort;
-    const ack = await submitCommand(session, "turn/start", commandId, params);
-    if (typeof ack.turnId !== "string" || typeof ack.disposition !== "string") {
-      throw new MspProtocolError("turn/start");
+      const inputParts = await mapVideoParts(session, input, options.abortSignal, runtime.videoChunkBytes);
+      if (options.abortSignal?.aborted) throw new DOMException("Muse request aborted before turn start", "AbortError");
+      subscriptionController = new AbortController();
+      subscription = session.host.subscribe(session.sessionId, session.replayAfterCursor, subscriptionController.signal)[Symbol.asyncIterator]();
+      firstNotification = subscription.next();
+      const params: Record<string, unknown> = {
+        sessionId: session.sessionId,
+        input: inputParts,
+      };
+      if (context.effort) params.reasoningEffort = context.effort;
+      const ack = await submitCommand(session, "turn/start", turnCommandId, params);
+      if (typeof ack.turnId !== "string" || typeof ack.disposition !== "string") {
+        throw new MspProtocolError("turn/start");
+      }
+      turnId = ack.turnId;
+      disposition = ack.disposition;
+      accepted = true;
+      await session.recordTurnAccepted?.(turnCommandId, turnId);
     }
-    turnId = ack.turnId;
-    disposition = ack.disposition;
-    accepted = true;
-    await session.recordTurnAccepted?.(commandId, turnId);
     if (abortRequested) await cancel();
 
     const events: AsyncIterable<MspNotification> = {
@@ -325,11 +370,14 @@ export async function runMuseTurn(
           options.abortSignal?.removeEventListener("abort", onAbort);
           subscriptionController?.abort();
           await subscription?.return?.();
-          await session.release?.();
+          // The joining call owns the lease now; the superseded owner detaches
+          // without releasing. The first release wins; exactly one runs.
+          if (session.handoffLeaseToJoiner) session.handoffLeaseToJoiner = false;
+          else await session.release?.();
         }
       },
     };
-    return { turnId, commandId, disposition, events, cancel };
+    return { turnId, commandId: turnCommandId, disposition, events, cancel };
   } catch (error) {
     options.abortSignal?.removeEventListener("abort", onAbort);
     if (accepted && subscription && firstNotification && turnId) {
@@ -366,7 +414,8 @@ export async function runMuseTurn(
         } finally {
           subscriptionController?.abort();
           await subscription?.return?.().catch(() => {});
-          await session.release?.().catch(() => {});
+          if (session.handoffLeaseToJoiner) session.handoffLeaseToJoiner = false;
+          else await session.release?.().catch(() => {});
         }
       })();
     } else if (!accepted) {
@@ -375,7 +424,8 @@ export async function runMuseTurn(
       await subscription?.return?.();
       const commandMethod = (error as { method?: unknown } | null)?.method;
       const ambiguousTurnStart = commandMethod === "turn/start" && !(error instanceof MspCommandRejectedError);
-      if (!ambiguousTurnStart) await session.release?.();
+      // A failed join never owned the lease; the parked owner still holds it.
+      if (!ambiguousTurnStart && !joinedTurn) await session.release?.();
     }
     throw error;
   }
@@ -454,7 +504,7 @@ function localMetaStream(kind: "title" | "compaction", text: string): ReadableSt
 }
 
 export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: string): LanguageModelV3 {
-  const doPrepare = async (options: LanguageModelV3CallOptions) => {
+  const doPrepare = async (options: LanguageModelV3CallOptions, allowParkedJoin: boolean) => {
     const requestKind = classifyCall(options);
     if (requestKind !== "agent") throw new MuseUnsupportedRequestError(requestKind);
     const context = readRequestContext(options, runtime.selectionIndex);
@@ -464,9 +514,28 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     if (!supportedOptions.ok) throw inputErrorToException(supportedOptions.error);
     const initialExtraction = extractTurnInput(options.prompt, [], [], { signal: options.abortSignal });
     if (!initialExtraction.ok) throw inputErrorToException(initialExtraction.error);
+    const approvalResponses = extractApprovalResponses(options.prompt);
+    if (!allowParkedJoin && approvalResponses.length > 0) {
+      if (await runtime.hasParkedApprovals?.(context.sessionID)) {
+        throw new MuseUnsupportedRequestError("approval-response");
+      }
+      await runtime.settleApprovalResponses?.(context.sessionID, approvalResponses);
+    }
+    if (allowParkedJoin && approvalResponses.length > 0) {
+      if (!runtime.settleApprovalResponses) {
+        if (await runtime.hasParkedApprovals?.(context.sessionID)) {
+          throw new MuseUnsupportedRequestError("approval-response");
+        }
+      } else {
+        await runtime.settleApprovalResponses(context.sessionID, approvalResponses);
+      }
+    }
     const session = await runtime.resolveSession(context);
+    // Set by the manager when the settled verdicts matched a parked turn.
+    const joining = session.joinParkedTurnId !== undefined;
     if (session.contextError) {
-      await session.release?.();
+      if (joining) runtime.disarmParkedJoin?.(context.sessionID);
+      else await session.release?.();
       throw new MuseUnsupportedRequestError(session.contextError);
     }
     const observedCompaction = (session.compactionFingerprints ?? []).some((candidate) =>
@@ -479,14 +548,47 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
       { signal: options.abortSignal },
     );
     if (!extracted.ok) {
-      await session.release?.();
+      if (joining && extracted.error.code === "no-new-user-input") {
+        try {
+          const execution = await runMuseTurn(context, [], options, {
+            ...runtime,
+            resolveSession: async () => session,
+          }, session.previousTranscriptFingerprints);
+          return {
+            context,
+            execution,
+            mapper: new MuseStreamMapper(execution.turnId, session.emittedApprovalPrompts),
+            warnings: ignoredOptionWarnings(supportedOptions.options.ignoredOptions),
+            epoch: session.streamEpoch,
+            session,
+          };
+        } catch (error) {
+          runtime.disarmParkedJoin?.(context.sessionID);
+          throw error;
+        }
+      }
+      if (joining) runtime.disarmParkedJoin?.(context.sessionID);
+      else await session.release?.();
       throw inputErrorToException(extracted.error);
     }
-    const execution = await runMuseTurn(context, extracted.parts, options, {
-      ...runtime,
-      resolveSession: async () => session,
-    }, extracted.nextTranscriptFingerprints);
-    return { context, execution, mapper: new MuseStreamMapper(execution.turnId), warnings: ignoredOptionWarnings(supportedOptions.options.ignoredOptions) };
+    let execution: MuseTurnExecution;
+    try {
+      execution = await runMuseTurn(context, extracted.parts, options, {
+        ...runtime,
+        resolveSession: async () => session,
+      }, extracted.nextTranscriptFingerprints);
+    } catch (error) {
+      if (joining) runtime.disarmParkedJoin?.(context.sessionID);
+      throw error;
+    }
+    return {
+      context,
+      execution,
+      mapper: new MuseStreamMapper(execution.turnId, session.emittedApprovalPrompts),
+      warnings: ignoredOptionWarnings(supportedOptions.options.ignoredOptions),
+      epoch: session.streamEpoch,
+      session,
+    };
   };
 
   return {
@@ -503,7 +605,7 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
         return { stream: localMetaStream(requestKind, localMetaText(requestKind, options)) };
       }
       if (requestKind === "unsupported-generate") throw new MuseUnsupportedRequestError("generate");
-      const prepared = await doPrepare(options);
+      const prepared = await doPrepare(options, true);
       let outputClosed = false;
       let controllerRef: ReadableStreamDefaultController<LanguageModelV3StreamPart> | undefined;
       const closeOutput = () => {
@@ -518,6 +620,14 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
           void (async () => {
             try {
               for await (const notification of prepared.execution.events) {
+                // A newer call took over this session's output: end this
+                // stream without a finish part. The generator's finally
+                // detaches the lease to the joining call.
+                if (prepared.epoch !== undefined && prepared.session.streamEpoch !== undefined
+                  && prepared.session.streamEpoch !== prepared.epoch) {
+                  closeOutput();
+                  break;
+                }
                 const parts = prepared.mapper.accept(notification);
                 for (const part of parts) {
                   if (outputClosed) continue;
@@ -556,10 +666,14 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
         return localMetaGenerateResult(requestKind, localMetaText(requestKind, options));
       }
       if (requestKind === "unsupported-generate") throw new MuseUnsupportedRequestError("generate");
-      const prepared = await doPrepare(options);
+      const prepared = await doPrepare(options, false);
       let terminalError: Error | undefined;
       const iterator = prepared.execution.events[Symbol.asyncIterator]();
       while (true) {
+        if (prepared.epoch !== undefined && prepared.session.streamEpoch !== undefined
+          && prepared.session.streamEpoch !== prepared.epoch) {
+          break;
+        }
         const next = await iterator.next();
         if (next.done) break;
         const parts = prepared.mapper.accept(next.value);

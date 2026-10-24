@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { LanguageModelV3Prompt } from "@ai-sdk/provider";
 import {
+  extractApprovalResponses,
   extractTurnInput,
   fingerprintVisibleTranscript,
   validateModelOptions,
@@ -170,5 +171,28 @@ describe("Muse prompt extraction", () => {
   test("prompt.andSessionRegistryShareOneVisibleTranscriptFingerprintAlgorithm", () => {
     const prompt = [userText("same line\r\nnext line"), assistantText("answer")] as unknown as LanguageModelV3Prompt;
     expect(fingerprintVisibleTranscript(prompt)).toEqual(fingerprintTranscript(prompt));
+  });
+
+  test("prompt.extractsToolApprovalResponsesFromUserMessages", () => {
+    const prompt = [{
+      role: "user",
+      content: [
+        { type: "tool-approval-response", approvalId: "approval-1", approved: true },
+        { type: "text", text: "go on" },
+      ],
+    }] as unknown as LanguageModelV3Prompt;
+    expect(extractApprovalResponses(prompt)).toEqual([{ approvalId: "approval-1", approved: true }]);
+  });
+
+  test("prompt.ignoresMalformedApprovalResponses", () => {
+    const prompt = [{
+      role: "user",
+      content: [
+        { type: "tool-approval-response", approvalId: 42, approved: "yes" },
+        { type: "tool-approval-response", approved: true },
+        { type: "tool-call", toolCallId: "call-1", toolName: "shell", input: "{}" },
+      ],
+    }] as unknown as LanguageModelV3Prompt;
+    expect(extractApprovalResponses(prompt)).toEqual([]);
   });
 });

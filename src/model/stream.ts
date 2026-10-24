@@ -51,7 +51,7 @@ export class MuseStreamMapper {
   terminal?: string;
   failure?: Error;
 
-  constructor(readonly turnId: string) {}
+  constructor(readonly turnId: string, private readonly emittedApprovals: Set<string> = new Set()) {}
 
   get generatedText(): string {
     return this.textParts.map((part) => part.text).join("");
@@ -103,9 +103,28 @@ export class MuseStreamMapper {
         return this.finishWasSent ? [] : [this.finishPart("other", "retracted")];
       case "turn/completed":
         return this.turnCompleted(params);
+      case "approval/requested":
+        return this.approvalRequestedEvent(params);
       default:
         return [];
     }
+  }
+
+  private approvalRequestedEvent(params: Record<string, unknown>): MuseStreamPart[] {
+    const approvalId = params.approvalId;
+    const toolCallId = params.toolCallId;
+    if (typeof approvalId !== "string" || typeof toolCallId !== "string") return [];
+    const requirementId = typeof params.currentRequirementId === "string" ? params.currentRequirementId : "";
+    const stageKey = `${approvalId} ${requirementId}`;
+    if (this.emittedApprovals.has(stageKey)) return [];
+    this.emittedApprovals.add(stageKey);
+    const toolName = params.toolName;
+    return [{
+      type: "tool-approval-request",
+      approvalId,
+      toolCallId,
+      ...(typeof toolName === "string" ? { providerMetadata: { muse: { toolName } } } : {}),
+    }];
   }
 
   private itemStartedEvent(params: Record<string, unknown>): MuseStreamPart[] {
