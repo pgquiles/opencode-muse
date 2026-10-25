@@ -67,22 +67,24 @@ multi-pane use on one checkout serializes.
 
 ## Unknowns (resolve before/with implementation)
 
-- Claim origination without an MSP send verb (the open design
-  point): bridge-mediated claims over our own lease protocol, CLI
-  `session-message send` with unprobed attribution, or agent-owned
-  coordination. No guess — prototype and pick.
-- `canReceive: false` "launch-excluded rows": verify serve sessions
-  are not excluded.
-- Admission auto-decision legitimacy: is bridge-decided admission
-  honored, or does the sender-approval gate require a human?
+- Claim origination (RESOLVED 2026-10-25: bridge-mediated is the
+  only path). No MSP send verb exists; `peer/list` grants but shows
+  serve sessions zero peers; inbound CLI send fails
+  `external_agent_ingress_closed` with nothing observed bridge-side.
+  Claims ride our own lease protocol, not the peer plane.
+- Admission auto-decision is moot: no admission request can reach a
+  serve session, so there is nothing to decide.
 - Experimental availability mechanics: how a build advertises the
-  peer/worktree/admission surface, and how the fingerprint check
-  treats it.
+  `worktree` surface (enablement: `capabilities.experimentalApi`
+  plus trusted workspace — `workspaceNotTrusted` on untrusted paths),
+  and how the fingerprint check treats it.
 - Crash orphans: worktree cleanup on session close vs explicit user
   cleanup (same shape as the #33 retention decision; decide and
   write it down).
 - Interplay with #20 (no filesystem rollback on rewind) and #23
   (event-gap recovery) inside worktree-scoped sessions.
+- Remaining live probe: `session/start` with
+  `worktree: {mode: "create"}` in a scratch repo.
 
 ## Verification
 
