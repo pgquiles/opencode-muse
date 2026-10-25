@@ -116,9 +116,11 @@ the billed lane with `muse usage`. See
   are shown as a lettered list, your next message picks one (fuzzy match on
   letter, number, or name), anything unrecognized is asked once more, then
   denied — ambiguity never approves. Verdicts skip OpenCode permission rules
-  until core ships native support. Structured questions beyond approvals are
-  still unsupported. See [#6](https://github.com/pgquiles/opencode-muse/issues/6)
-  and [#30](https://github.com/pgquiles/opencode-muse/issues/30).
+  until core ships native support. Structured option-questions are answered
+  the same conversational way (single-select only; anything else cancels
+  with a reason). See [#6](https://github.com/pgquiles/opencode-muse/issues/6),
+  [#30](https://github.com/pgquiles/opencode-muse/issues/30), and
+  [#31](https://github.com/pgquiles/opencode-muse/issues/31).
 - **Files and response formats:** The bridge accepts text, PNG/JPEG/GIF/WebP
   images, and MP4/MOV video. Audio and PDF attachments are not supported.
   Strict JSON output and some OpenCode generation settings (such as
