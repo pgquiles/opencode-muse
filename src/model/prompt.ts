@@ -1,5 +1,6 @@
 import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/provider";
 import { fingerprintTranscript } from "../session/fingerprint.js";
+import type { TranscribeAudio } from "../msp/transcribe.js";
 
 export interface ContextFragment {
   label: string;
@@ -24,6 +25,9 @@ export type PromptInputErrorCode =
   | "remote-media"
   | "unsupported-media"
   | "media-too-large"
+  | "transcription-failed"
+  | "transcription-timeout"
+  | "no-speech-heard"
   | "aborted"
   | "unsupported-response-format"
   | "required-opencode-tool"
@@ -44,6 +48,8 @@ export interface ExtractTurnInputOptions {
   maxMediaBytes?: number;
   maxInlineImageBytes?: number;
   signal?: AbortSignal;
+  /** Absent: audio falls back to `unsupported-media` (pre-#32 behavior). */
+  transcribeAudio?: TranscribeAudio;
 }
 
 export interface ModelOptionsInput {
@@ -114,13 +120,29 @@ function fileBytes(part: LanguageModelV3FilePart): { bytes: Uint8Array; mediaTyp
   return { bytes, mediaType };
 }
 
-function extractFilePart(
+async function extractFilePart(
   part: LanguageModelV3FilePart,
   limits: { maxMediaBytes: number; maxInlineImageBytes: number },
-): ExtractedTurnPart | PromptInputError {
+  transcribeAudio?: TranscribeAudio,
+): Promise<ExtractedTurnPart | PromptInputError> {
   const mediaType = part.mediaType.toLowerCase();
-  if (mediaType.startsWith("audio/") || mediaType === "application/pdf") {
+  if (mediaType === "application/pdf") {
     return inputError("unsupported-media", { mediaType: safeMediaType(mediaType) });
+  }
+  if (mediaType.startsWith("audio/")) {
+    if (!transcribeAudio) return inputError("unsupported-media", { mediaType: safeMediaType(mediaType) });
+    const decoded = fileBytes(part);
+    if ("type" in decoded) return decoded;
+    if (decoded.bytes.byteLength > limits.maxMediaBytes) {
+      return inputError("media-too-large", { mediaType: safeMediaType(decoded.mediaType) });
+    }
+    const outcome = await transcribeAudio(decoded.bytes, decoded.mediaType.toLowerCase());
+    if (!outcome.ok) return inputError(outcome.code, { mediaType: safeMediaType(decoded.mediaType) });
+    const byteCount = decoded.bytes.byteLength;
+    return {
+      type: "text",
+      text: `[Transcription of attached audio (${decoded.mediaType.toLowerCase()}, ${byteCount} bytes): "${outcome.transcript}"]`,
+    };
   }
   const decoded = fileBytes(part);
   if ("type" in decoded) return decoded;
@@ -149,12 +171,12 @@ function extractFilePart(
   return inputError("unsupported-media", { mediaType: safeMediaType(mediaType) });
 }
 
-export function extractTurnInput(
+export async function extractTurnInput(
   prompt: LanguageModelV3Prompt,
   previousTranscriptFingerprints: readonly string[],
   contextAllowlist: readonly ContextFragment[],
   options: ExtractTurnInputOptions = {},
-): ExtractTurnInputResult {
+): Promise<ExtractTurnInputResult> {
   if (options.signal?.aborted) return { ok: false, error: inputError("aborted") };
   const current = visibleMessages(prompt);
   const currentFingerprints = current.map((entry) => entry.fingerprint);
@@ -198,7 +220,7 @@ export function extractTurnInput(
       if (part.type === "text") {
         parts.push({ type: "text", text: part.text });
       } else if (part.type === "file") {
-        const mapped = extractFilePart(part, limits);
+        const mapped = await extractFilePart(part, limits, options.transcribeAudio);
         if ("code" in mapped) return { ok: false, error: mapped };
         parts.push(mapped);
       }

@@ -21,6 +21,7 @@ import {
 import { MuseStreamMapper, type FlatMuseUsage } from "./stream.js";
 import type { MuseModelSelection, RequestContext } from "../types.js";
 import type { UserInputQuestion as UserInputQuestionShape } from "../msp/user-input.js";
+import type { TranscribeAudio } from "../msp/transcribe.js";
 
 export interface MuseTurnHost {
   mintCommandId(): string;
@@ -76,6 +77,8 @@ export interface MuseLanguageRuntime {
   describePendingApproval?(sessionID: string, approvalId: string, requirementId: string): { choices: Array<{ choiceId: string; label: string; scope: string }>; toolName?: string } | undefined;
   consumeConversationalAnswer?(sessionID: string, text: string): Promise<{ text: string; settledLast: boolean } | null>;
   describeCurrentUserInputQuestion?(sessionID: string): { question: UserInputQuestionShape; toolName?: string } | undefined;
+  /** Audio attachment transcription (#32); absent preserves the unsupported-media rejection. */
+  transcribeAudioClip?: TranscribeAudio;
 }
 
 export interface MuseTurnExecution {
@@ -550,7 +553,10 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     if (context.kind !== "primary") throw new MuseUnsupportedRequestError(context.kind);
     const supportedOptions = validateModelOptions(options);
     if (!supportedOptions.ok) throw inputErrorToException(supportedOptions.error);
-    const initialExtraction = extractTurnInput(options.prompt, [], [], { signal: options.abortSignal });
+    const initialExtraction = await extractTurnInput(options.prompt, [], [], {
+      signal: options.abortSignal,
+      transcribeAudio: runtime.transcribeAudioClip,
+    });
     if (!initialExtraction.ok) throw inputErrorToException(initialExtraction.error);
     const approvalResponses = extractApprovalResponses(options.prompt);
     if (!allowParkedJoin && approvalResponses.length > 0) {
@@ -583,11 +589,11 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     const observedCompaction = (session.compactionFingerprints ?? []).some((candidate) =>
       promptContainsCompactionFingerprint(options.prompt, candidate),
     );
-    const extracted = extractTurnInput(
+    const extracted = await extractTurnInput(
       options.prompt,
       observedCompaction ? [] : session.previousTranscriptFingerprints,
       session.contextAllowlist,
-      { signal: options.abortSignal },
+      { signal: options.abortSignal, transcribeAudio: runtime.transcribeAudioClip },
     );
     if (!extracted.ok) {
       if (joining && extracted.error.code === "no-new-user-input") {

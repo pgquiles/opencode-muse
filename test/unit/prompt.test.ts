@@ -13,37 +13,37 @@ const userText = (text: string) => ({ role: "user", content: [{ type: "text", te
 const assistantText = (text: string) => ({ role: "assistant", content: [{ type: "text", text }] }) as const;
 
 describe("Muse prompt extraction", () => {
-  test("prompt.sendsOnlyTheNewUserMessageInsteadOfReplayingHistory", () => {
+  test("prompt.sendsOnlyTheNewUserMessageInsteadOfReplayingHistory", async () => {
     const previous = [userText("old request"), assistantText("old response")] as unknown as LanguageModelV3Prompt;
     const current = [...previous, userText("new request")] as unknown as LanguageModelV3Prompt;
-    const result = extractTurnInput(current, fingerprintVisibleTranscript(previous), []);
+    const result = await extractTurnInput(current, fingerprintVisibleTranscript(previous), []);
 
     expect(result).toMatchObject({ ok: true, parts: [{ type: "text", text: "new request" }] });
     expect(result.ok && result.nextTranscriptFingerprints).toHaveLength(3);
   });
 
-  test("prompt.firstUseWithAnExistingTranscriptSendsOnlyTheFinalUserTurn", () => {
+  test("prompt.firstUseWithAnExistingTranscriptSendsOnlyTheFinalUserTurn", async () => {
     const prompt = [userText("old prompt"), assistantText("old answer"), userText("current prompt")] as unknown as LanguageModelV3Prompt;
-    const result = extractTurnInput(prompt, [], []);
+    const result = await extractTurnInput(prompt, [], []);
 
     expect(result).toMatchObject({ ok: true, parts: [{ type: "text", text: "current prompt" }] });
     expect(result.ok && result.nextTranscriptFingerprints).toHaveLength(3);
   });
 
-  test("prompt.rejectsSameLengthHistoryEditsAsDivergence", () => {
+  test("prompt.rejectsSameLengthHistoryEditsAsDivergence", async () => {
     const previous = [userText("before"), assistantText("response")] as unknown as LanguageModelV3Prompt;
     const changed = [userText("edited"), assistantText("response"), userText("new request")] as unknown as LanguageModelV3Prompt;
-    const result = extractTurnInput(changed, fingerprintVisibleTranscript(previous), []);
+    const result = await extractTurnInput(changed, fingerprintVisibleTranscript(previous), []);
     expect(result).toMatchObject({ ok: false, error: { code: "transcript-diverged" } });
   });
 
-  test("prompt.forwardsOnlyExplicitlyAllowedContextWithLabels", () => {
+  test("prompt.forwardsOnlyExplicitlyAllowedContextWithLabels", async () => {
     const prompt = [
       { role: "system", content: "volatile hidden system instructions" },
       userText("new request"),
     ] as unknown as LanguageModelV3Prompt;
     const context: ContextFragment[] = [{ label: "OpenCode agent instructions", text: "Use concise responses." }];
-    const result = extractTurnInput(prompt, [], context);
+    const result = await extractTurnInput(prompt, [], context);
 
     expect(result).toMatchObject({
       ok: true,
@@ -55,13 +55,13 @@ describe("Muse prompt extraction", () => {
     expect(JSON.stringify(result)).not.toContain("volatile hidden system instructions");
   });
 
-  test("prompt.doesNotStartATurnFromContextAlone", () => {
+  test("prompt.doesNotStartATurnFromContextAlone", async () => {
     const prompt = [{ role: "user", content: [] }] as unknown as LanguageModelV3Prompt;
-    const result = extractTurnInput(prompt, [], [{ label: "Agent", text: "Use terse answers." }]);
+    const result = await extractTurnInput(prompt, [], [{ label: "Agent", text: "Use terse answers." }]);
     expect(result).toMatchObject({ ok: false, error: { code: "no-new-user-input" } });
   });
 
-  test("prompt.mapsImageBytesAndVideoUploadPayloadsWithoutFetchingUrls", () => {
+  test("prompt.mapsImageBytesAndVideoUploadPayloadsWithoutFetchingUrls", async () => {
     const prompt = [{
       role: "user",
       content: [
@@ -69,7 +69,7 @@ describe("Muse prompt extraction", () => {
         { type: "file", mediaType: "video/mp4", data: Uint8Array.from([4, 5, 6, 7]) },
       ],
     }] as unknown as LanguageModelV3Prompt;
-    const result = extractTurnInput(prompt, [], []);
+    const result = await extractTurnInput(prompt, [], []);
 
     expect(result).toMatchObject({
       ok: true,
@@ -80,42 +80,42 @@ describe("Muse prompt extraction", () => {
     });
   });
 
-  test("prompt.rejectsRemoteImageAudioPdfAndOversizeDataBeforeStartingATurn", () => {
+  test("prompt.rejectsRemoteImageAudioPdfAndOversizeDataBeforeStartingATurn", async () => {
     const remote = [{ role: "user", content: [{ type: "file", mediaType: "image/png", data: new URL("https://example.invalid/a.png") }] }] as unknown as LanguageModelV3Prompt;
     const audio = [{ role: "user", content: [{ type: "file", mediaType: "audio/wav", data: Uint8Array.from([1]) }] }] as unknown as LanguageModelV3Prompt;
     const pdf = [{ role: "user", content: [{ type: "file", mediaType: "application/pdf", data: Uint8Array.from([1]) }] }] as unknown as LanguageModelV3Prompt;
     const large = [{ role: "user", content: [{ type: "file", mediaType: "image/png", data: new Uint8Array(9) }] }] as unknown as LanguageModelV3Prompt;
 
-    expect(extractTurnInput(remote, [], [], { maxMediaBytes: 8 })).toMatchObject({ ok: false, error: { code: "remote-media" } });
-    expect(extractTurnInput(audio, [], [])).toMatchObject({ ok: false, error: { code: "unsupported-media", mediaType: "audio/wav" } });
-    expect(extractTurnInput(pdf, [], [])).toMatchObject({ ok: false, error: { code: "unsupported-media", mediaType: "application/pdf" } });
-    expect(extractTurnInput(large, [], [], { maxMediaBytes: 8 })).toMatchObject({ ok: false, error: { code: "media-too-large" } });
+    expect(await extractTurnInput(remote, [], [], { maxMediaBytes: 8 })).toMatchObject({ ok: false, error: { code: "remote-media" } });
+    expect(await extractTurnInput(audio, [], [])).toMatchObject({ ok: false, error: { code: "unsupported-media", mediaType: "audio/wav" } });
+    expect(await extractTurnInput(pdf, [], [])).toMatchObject({ ok: false, error: { code: "unsupported-media", mediaType: "application/pdf" } });
+    expect(await extractTurnInput(large, [], [], { maxMediaBytes: 8 })).toMatchObject({ ok: false, error: { code: "media-too-large" } });
   });
 
-  test("prompt.preflightCancellationStopsBeforeReturningAnyTurnInput", () => {
+  test("prompt.preflightCancellationStopsBeforeReturningAnyTurnInput", async () => {
     const controller = new AbortController();
     controller.abort();
-    const result = extractTurnInput([userText("cancelled") ] as unknown as LanguageModelV3Prompt, [], [], {
+    const result = await extractTurnInput([userText("cancelled") ] as unknown as LanguageModelV3Prompt, [], [], {
       signal: controller.signal,
     } as never);
     expect(result).toMatchObject({ ok: false, error: { code: "aborted" } });
   });
 
-  test("prompt.rejectsInvalidBase64AndDoesNotLeakPayloadInErrors", () => {
+  test("prompt.rejectsInvalidBase64AndDoesNotLeakPayloadInErrors", async () => {
     const prompt = [{ role: "user", content: [{ type: "file", mediaType: "image/png", data: "not base64 secret" }] }] as unknown as LanguageModelV3Prompt;
-    const result = extractTurnInput(prompt, [], []);
+    const result = await extractTurnInput(prompt, [], []);
     expect(result).toMatchObject({ ok: false, error: { code: "invalid-media" } });
     expect(JSON.stringify(result)).not.toContain("secret");
   });
 
-  test("prompt.errorsDoNotEchoMalformedMediaTypeStrings", () => {
+  test("prompt.errorsDoNotEchoMalformedMediaTypeStrings", async () => {
     const prompt = [{ role: "user", content: [{ type: "file", mediaType: "private-secret", data: Uint8Array.from([1]) }] }] as unknown as LanguageModelV3Prompt;
-    const result = extractTurnInput(prompt, [], []);
+    const result = await extractTurnInput(prompt, [], []);
     expect(result).toMatchObject({ ok: false, error: { code: "unsupported-media", mediaType: "unknown" } });
     expect(JSON.stringify(result)).not.toContain("private-secret");
   });
 
-  test("prompt.validatesResponseFormatAndRequiredOpenCodeToolOnly", () => {
+  test("prompt.validatesResponseFormatAndRequiredOpenCodeToolOnly", async () => {
     expect(validateModelOptions({
       responseFormat: { type: "text" },
       tools: [{ type: "function", name: "shell", inputSchema: { type: "object", properties: {} } }],
@@ -136,19 +136,19 @@ describe("Muse prompt extraction", () => {
       .toMatchObject({ ok: false, error: { code: "required-opencode-tool" } });
   });
 
-  test("prompt.fingerprintIncludesOrderedVisibleHistoryButNotSystemBoilerplate", () => {
+  test("prompt.fingerprintIncludesOrderedVisibleHistoryButNotSystemBoilerplate", async () => {
     const first = [{ role: "system", content: "one" }, userText("same"), assistantText("answer")] as unknown as LanguageModelV3Prompt;
     const second = [{ role: "system", content: "changed volatile text" }, userText("same"), assistantText("answer")] as unknown as LanguageModelV3Prompt;
     expect(fingerprintVisibleTranscript(first)).toEqual(fingerprintVisibleTranscript(second));
   });
 
-  test("prompt.fingerprintNormalizesUnicodeAndLineEndings", () => {
+  test("prompt.fingerprintNormalizesUnicodeAndLineEndings", async () => {
     const composed = [userText("café\nnext line")] as unknown as LanguageModelV3Prompt;
     const decomposed = [userText("cafe\u0301\r\nnext line")] as unknown as LanguageModelV3Prompt;
     expect(fingerprintVisibleTranscript(composed)).toEqual(fingerprintVisibleTranscript(decomposed));
   });
 
-  test("prompt.fingerprintExcludesReasoningAndToolTraffic", () => {
+  test("prompt.fingerprintExcludesReasoningAndToolTraffic", async () => {
     const first = [{
       role: "assistant",
       content: [
@@ -168,12 +168,12 @@ describe("Muse prompt extraction", () => {
     expect(fingerprintVisibleTranscript(first)).toEqual(fingerprintVisibleTranscript(second));
   });
 
-  test("prompt.andSessionRegistryShareOneVisibleTranscriptFingerprintAlgorithm", () => {
+  test("prompt.andSessionRegistryShareOneVisibleTranscriptFingerprintAlgorithm", async () => {
     const prompt = [userText("same line\r\nnext line"), assistantText("answer")] as unknown as LanguageModelV3Prompt;
     expect(fingerprintVisibleTranscript(prompt)).toEqual(fingerprintTranscript(prompt));
   });
 
-  test("prompt.extractsToolApprovalResponsesFromUserMessages", () => {
+  test("prompt.extractsToolApprovalResponsesFromUserMessages", async () => {
     const prompt = [{
       role: "user",
       content: [
@@ -184,7 +184,7 @@ describe("Muse prompt extraction", () => {
     expect(extractApprovalResponses(prompt)).toEqual([{ approvalId: "approval-1", approved: true }]);
   });
 
-  test("prompt.ignoresMalformedApprovalResponses", () => {
+  test("prompt.ignoresMalformedApprovalResponses", async () => {
     const prompt = [{
       role: "user",
       content: [

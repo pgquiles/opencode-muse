@@ -39,9 +39,9 @@ dishonest labeling plus unverified server behavior.
   into the user's own words.
 - No silent drops: a clip that cannot be transcribed fails loudly.
 - No credential handling: the CLI owns auth end to end.
-- Transcription cost is subscription-billed until proven otherwise;
-  README must say so (user attaching the file is implicit consent,
-  but the billing fact must be written down, not assumed).
+- Transcription rides the flat subscription (voice mode is included
+  in every plan per official docs); README states that. User
+  attaching the file is consent to transcribe it.
 
 ## Probe results (2026-10-25, Muse 1.4.13, subscription session)
 
@@ -65,12 +65,13 @@ Contract is clean and machine-readable:
   quick...` vs `The Quick...` on identical bytes). Never assert
   exact-match on transcript content in tests; match case-insensitively
   or on word sets.
-- Billing: no observable movement in `muse usage` (window and weekly
-  percentages unchanged across 8 transcribe calls). Meter is too
-  coarse to confirm unmetered vs micro-billed — README must still
-  disclose "billed per your Muse subscription terms, exact metering
-  unconfirmed". PAYG-side price untestable from a subscription
-  session (auth switch 400s); not gated on it.
+- Billing: resolved per [official subscription
+  docs](https://dev.meta.ai/help/subscriptions/what-is-a-muse-code-subscription)
+  — every plan "Use voice mode", i.e. transcription is included in
+  the flat subscription, consistent with our probes (no `muse usage`
+  movement across 8 transcribe calls). README states inclusion, not
+  metering uncertainty. PAYG-side behavior stays out of scope: this
+  plugin is subscription-only (#29).
 
 Remaining (non-gating): oversized-input ceiling unprobed — the spawn
 timeout plus exit-3 mapping covers it behaviorally; size cap

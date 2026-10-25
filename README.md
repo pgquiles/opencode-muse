@@ -100,6 +100,13 @@ the billed lane with `muse usage`. See
   supported sessions and replaying available session updates after reconnects.
 - Attach supported images (PNG, JPEG, GIF, WebP) and videos (MP4, MOV) to a
   Muse turn.
+- Attach audio clips (WAV, MP3, OGG, and anything else the CLI's local
+  decoder accepts) to a Muse turn: the plugin transcribes them through the
+  official `muse voice transcribe` route — voice mode is included in every
+  subscription plan — and the transcript enters the turn as declared text.
+  A clip that cannot be transcribed fails the turn loudly instead of being
+  silently dropped. See
+  [#32](https://github.com/pgquiles/opencode-muse/issues/32).
 - Pick a reasoning effort per model through OpenCode's own controls: an
   untouched model runs its catalog default (which rotates over time), Ctrl+T
   cycles the concrete variants (`minimal` … `max`, model-dependent, one way
@@ -137,7 +144,8 @@ the billed lane with `muse usage`. See
   reason until native structured input lands (tracked in
   [#6](https://github.com/pgquiles/opencode-muse/issues/6)).
 - **Files and response formats:** The bridge accepts text, PNG/JPEG/GIF/WebP
-  images, and MP4/MOV video. Audio and PDF attachments are not supported.
+  images, MP4/MOV video, and audio clips (transcribed to labeled text, see
+  Features). PDF attachments are not supported.
   Strict JSON output and some OpenCode generation settings (such as
   temperature and token limits) are not supported; requests that require a
   specific OpenCode tool are rejected. Muse's separate CLI transcription and

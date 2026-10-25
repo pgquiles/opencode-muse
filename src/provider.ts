@@ -7,6 +7,7 @@ import {
 } from "./catalog.js";
 import { addRequestContextHeaders } from "./model/context.js";
 import { createMuseLanguageModel } from "./model/language-model.js";
+import { createCliTranscriber } from "./msp/transcribe.js";
 import { MuseSessionManager } from "./session/manager.js";
 import { SessionRegistry } from "./session/registry.js";
 import { WorkspaceLock } from "./session/workspace-lock.js";
@@ -138,6 +139,7 @@ export async function createProviderPlugin(
       }
       input.language = createMuseLanguageModel({
         selectionIndex: catalog.selectionIndex,
+        transcribeAudioClip: createCliTranscriber({ museBin }),
         resolveSession: (context) => sessions.resolveSession(context),
         settleApprovalResponses: (sessionID, responses) => sessions.settleApprovalResponses(sessionID, responses),
         hasParkedApprovals: (sessionID) => sessions.hasParkedApprovals(sessionID),
