@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readRepositoryJson, repositoryPath } from "./helpers.ts";
 import "./unit/contributor.test.ts";
 import "./unit/conversational-approval.test.ts";
+import "./unit/conversational-userinput.test.ts";
 import "./unit/msp-client.test.ts";
 import "./unit/msp-approval-exchange.test.ts";
 import "./unit/msp-approvals.test.ts";

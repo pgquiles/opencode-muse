@@ -255,6 +255,64 @@ describe("Muse → LanguageModelV3 stream mapping", () => {
     }))).toEqual([]);
   });
 
+  test("stream.endsTheTurnWithAConversationalQuestionForAUserInputRequest", () => {
+    const mapper = new MuseStreamMapper("turn-1");
+    const parts = mapper.accept(event("userInput/requested", {
+      sessionId: "ses-1",
+      userInputId: "ui-1",
+      toolName: "shell",
+      questions: [{
+        id: "q-color",
+        header: "Pick a color",
+        question: "Which color?",
+        options: [{ label: "Blue" }, { label: "Red" }],
+      }],
+    }));
+    expect(parts.map((part) => (part as { type: string }).type)).toEqual([
+      "text-start",
+      "text-delta",
+      "text-end",
+      "finish",
+    ]);
+    const delta = (parts[1] as { delta: string }).delta;
+    expect(delta).toContain("opencode-muse bridge message");
+    expect(delta).toContain("Pick a color");
+    expect(delta).toContain("A. Blue");
+    expect(delta).toContain("Reply with one option");
+    expect((parts[3] as { finishReason: { unified: string } }).finishReason).toMatchObject({ unified: "stop" });
+  });
+
+  test("stream.prefersTheExchangeLookupOverStaleEventQuestions", () => {
+    const mapper = new MuseStreamMapper("turn-1", new Set(), undefined, () => ({
+      question: { id: "q-live", header: "Live", question: "Live question?", options: [{ label: "Yes" }] },
+    }));
+    const parts = mapper.accept(event("userInput/requested", {
+      sessionId: "ses-1",
+      userInputId: "ui-1",
+      questions: [],
+    }));
+    const delta = (parts[1] as { delta: string }).delta;
+    expect(delta).toContain("Live question?");
+  });
+
+  test("stream.ignoresMalformedUserInputRequestsWithoutEmitting", () => {
+    const mapper = new MuseStreamMapper("turn-1");
+    expect(mapper.accept(event("userInput/requested", {
+      sessionId: "ses-1",
+      toolCallId: "call-1",
+    }))).toEqual([]);
+    expect(mapper.accept(event("userInput/requested", {
+      sessionId: "ses-1",
+      userInputId: "ui-1",
+      questions: [{ id: "q-bad", header: "Bad", question: "Bad?", options: [] }],
+    })).map((part) => (part as { type: string }).type)).toEqual([
+      "text-start",
+      "text-delta",
+      "text-end",
+      "finish",
+    ]);
+  });
+
   test("stream.emitsEachApprovalStageOnceAcrossMapperInstances", () => {
     const emitted = new Set<string>();
     const first = new MuseStreamMapper("turn-1", emitted);

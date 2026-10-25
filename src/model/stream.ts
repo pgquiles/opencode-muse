@@ -9,6 +9,11 @@ import {
   renderConversationalApprovalPrompt,
   type ConversationalChoice,
 } from "../msp/approvals.js";
+import {
+  presentableQuestion,
+  renderConversationalQuestionPrompt,
+  type UserInputQuestion,
+} from "../msp/user-input.js";
 
 export interface FlatMuseUsage {
   inputTokens: number | undefined;
@@ -62,6 +67,9 @@ export class MuseStreamMapper {
       approvalId: string,
       requirementId: string,
     ) => { choices: ConversationalChoice[]; toolName?: string } | undefined,
+    private readonly userInputQuestion?: (
+      userInputId: string,
+    ) => { question: UserInputQuestion; toolName?: string } | undefined,
   ) {}
 
   get generatedText(): string {
@@ -116,6 +124,8 @@ export class MuseStreamMapper {
         return this.turnCompleted(params);
       case "approval/requested":
         return this.approvalRequestedEvent(params);
+      case "userInput/requested":
+        return this.userInputRequestedEvent(params);
       default:
         return [];
     }
@@ -145,6 +155,34 @@ export class MuseStreamMapper {
       { type: "text-delta", id: itemId, delta: prompt },
       { type: "text-end", id: itemId },
       this.finishPart("stop", "approval-parked"),
+    ];
+  }
+
+  private userInputRequestedEvent(params: Record<string, unknown>): MuseStreamPart[] {
+    const userInputId = params.userInputId;
+    if (typeof userInputId !== "string") return [];
+    if (this.emittedApprovals.has(userInputId)) return [];
+    this.emittedApprovals.add(userInputId);
+    // A parked question ends the OpenCode turn with a conversational prompt
+    // instead of hanging. The answer arrives as the next user message; the
+    // parked turn resumes once every question is answered or cancelled.
+    // Prefer the event's own questions (no registration race), falling back
+    // to the exchange lookup for the oldest unanswered presentable question.
+    const eventQuestions = Array.isArray(params.questions) ? params.questions : [];
+    const described = this.userInputQuestion?.(userInputId);
+    const question = (eventQuestions.length > 0 ? presentableQuestion(eventQuestions[0]) : null)
+      ?? described?.question;
+    const toolName = described?.toolName ?? (typeof params.toolName === "string" ? params.toolName : undefined);
+    const prompt = question !== undefined && question !== null
+      ? renderConversationalQuestionPrompt({ toolName, question, attempt: 0 })
+      : `**Question** (opencode-muse bridge message, not the model): Muse asked a question${toolName ? ` while running \`${toolName}\`` : ""} but offered no usable options; the parked turn cancels on timeout. Re-prompt to try again.`;
+    const itemId = `user-input-${userInputId}`;
+    this.textParts.push({ type: "text", text: prompt });
+    return [
+      { type: "text-start", id: itemId },
+      { type: "text-delta", id: itemId, delta: prompt },
+      { type: "text-end", id: itemId },
+      this.finishPart("stop", "userinput-parked"),
     ];
   }
 

@@ -20,6 +20,7 @@ import {
 } from "./prompt.js";
 import { MuseStreamMapper, type FlatMuseUsage } from "./stream.js";
 import type { MuseModelSelection, RequestContext } from "../types.js";
+import type { UserInputQuestion as UserInputQuestionShape } from "../msp/user-input.js";
 
 export interface MuseTurnHost {
   mintCommandId(): string;
@@ -73,6 +74,8 @@ export interface MuseLanguageRuntime {
   disarmParkedJoin?(sessionID: string): void;
   consumeConversationalVerdict?(sessionID: string, text: string): Promise<{ text: string; settledLast: boolean } | null>;
   describePendingApproval?(sessionID: string, approvalId: string, requirementId: string): { choices: Array<{ choiceId: string; label: string; scope: string }>; toolName?: string } | undefined;
+  consumeConversationalAnswer?(sessionID: string, text: string): Promise<{ text: string; settledLast: boolean } | null>;
+  describeCurrentUserInputQuestion?(sessionID: string): { question: UserInputQuestionShape; toolName?: string } | undefined;
 }
 
 export interface MuseTurnExecution {
@@ -96,6 +99,12 @@ function userTextOf(parts: ExtractedTurnPart[]): string {
 function describeApprovals(runtime: MuseLanguageRuntime, sessionID: string) {
   return (approvalId: string, requirementId: string) =>
     runtime.describePendingApproval?.(sessionID, approvalId, requirementId);
+}
+
+/** Bridge question rendering to the stream mapper for one OpenCode session. */
+function describeUserInputQuestion(runtime: MuseLanguageRuntime, sessionID: string) {
+  return (_userInputId: string) =>
+    runtime.describeCurrentUserInputQuestion?.(sessionID);
 }
 
 /** A verdict turn that needs no Muse turn: re-asks and queued prompts. */
@@ -594,6 +603,7 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
               execution.turnId,
               session.emittedApprovalPrompts,
               describeApprovals(runtime, context.sessionID),
+              describeUserInputQuestion(runtime, context.sessionID),
             ),
             warnings: ignoredOptionWarnings(supportedOptions.options.ignoredOptions),
             epoch: session.streamEpoch,
@@ -610,19 +620,24 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
       else await session.release?.();
       throw inputErrorToException(extracted.error);
     }
-    // Conversational approval verdicts: with approvals pending and fresh
-    // user text (and no legacy structured responses), the message decides
-    // the oldest approval instead of starting a turn. Verdict text is never
-    // forwarded to the model.
+    // Conversational verdicts: with a parked approval or question and fresh
+    // user text (and no legacy structured responses), the message answers
+    // the oldest pending item instead of starting a turn. Approvals decide
+    // first — side effects gate the turn — then questions. Verdict text is
+    // never forwarded to the model.
     const verdictText = approvalResponses.length === 0 ? userTextOf(extracted.parts) : "";
     let initialText: string | undefined;
     let syntheticOnly = false;
     if (verdictText !== "") {
-      const outcome = await runtime.consumeConversationalVerdict?.(context.sessionID, verdictText);
+      const verdict = await runtime.consumeConversationalVerdict?.(context.sessionID, verdictText);
+      const answered = verdict
+        ? null
+        : await runtime.consumeConversationalAnswer?.(context.sessionID, verdictText);
+      const outcome = verdict ?? answered;
       if (outcome) {
         initialText = outcome.text;
         // Join only the final verdict while the parked turn is still
-        // attached: it resumes the turn. Re-asks, queued approvals, and
+        // attached: it resumes the turn. Re-asks, queued items, and
         // dead turns end synthetically with the outcome text.
         syntheticOnly = !outcome.settledLast || session.joinParkedTurnId === undefined;
       }
@@ -646,6 +661,7 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
         execution.turnId,
         session.emittedApprovalPrompts,
         describeApprovals(runtime, context.sessionID),
+        describeUserInputQuestion(runtime, context.sessionID),
       ),
       warnings: ignoredOptionWarnings(supportedOptions.options.ignoredOptions),
       epoch: session.streamEpoch,

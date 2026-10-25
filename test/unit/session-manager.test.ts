@@ -8,6 +8,7 @@ import { WorkspaceLock } from "../../src/session/workspace-lock.js";
 import { MuseSessionManager } from "../../src/session/manager.js";
 import { MspCommandTimeoutError, MuseApprovalPendingError, WorkspaceBusyError, MuseRecoveryChoiceRequiredError } from "../../src/errors.js";
 import { ApprovalExchange } from "../../src/msp/approvals.js";
+import { UserInputExchange } from "../../src/msp/user-input.js";
 import type { ContributorMode } from "../../src/msp/contributor.js";
 import type { RequestContext } from "../../src/types.js";
 
@@ -58,6 +59,7 @@ function managerAt(
   const hostOptions: Array<Record<string, unknown>> = [];
   const hosts: Array<{ closeCount: number }> = [];
   const exchanges: ApprovalExchange[] = [];
+  const userExchanges: UserInputExchange[] = [];
   const registry = registryOverride ?? new SessionRegistry({ stateDirectory: root });
   const manager = new MuseSessionManager({
     stateDirectory: root,
@@ -70,10 +72,13 @@ function managerAt(
       hosts.push(record);
       const approvals = new ApprovalExchange({ timeoutMs: 50 });
       exchanges.push(approvals);
+      const userInput = new UserInputExchange({ timeoutMs: 50 });
+      userExchanges.push(userInput);
       return {
         initializeResult: { sessionDurability: "durable" },
         mintCommandId: () => `018f4f17-9c2a-7c1a-a0fd-67a19db5d1${String(id++).padStart(2, "0")}`,
         approvals,
+        userInput,
         async command(method: string, params: Record<string, unknown>) {
           calls.push({ method, params });
           if (failSetModel && method === "session/setModel") {
@@ -102,7 +107,7 @@ function managerAt(
       } as never;
     },
   });
-  return { manager, calls, hosts, hostOptions, exchanges };
+  return { manager, calls, hosts, hostOptions, exchanges, userExchanges };
 }
 
 describe("MuseSessionManager", () => {
@@ -588,6 +593,106 @@ describe("MuseSessionManager", () => {
     expect(await secondParked).toMatchObject({ choiceId: "write-once" });
     expect(last).toMatchObject({ settledLast: true });
     expect(first.joinParkedTurnId).toBe("turn-1");
+    await manager.close();
+  });
+
+  test("sessionManager.consumesAConversationalAnswerAndJoinsOnTheLastQuestion", async () => {
+    const root = tempRoot();
+    const { manager, userExchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = userExchanges[0] as UserInputExchange;
+    void exchange.requestUserInput({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      toolCallId: "call-1",
+      itemId: "item-1",
+      viewCursor: "head-1",
+      userInputId: "ui-1",
+      questions: [{
+        id: "q-color",
+        header: "Pick a color",
+        question: "Which color?",
+        options: [{ label: "Blue" }, { label: "Red" }],
+      }],
+    });
+
+    const outcome = await manager.consumeConversationalAnswer("ses_oc_1", "b");
+    expect(outcome).not.toBeNull();
+    expect(outcome).toMatchObject({ settledLast: true });
+    expect(outcome?.text).toContain("Recorded: Red.");
+    expect(first.joinParkedTurnId).toBe("turn-1");
+    expect(exchange.pendingUserInputIds()).toEqual([]);
+    await manager.close();
+  });
+
+  test("sessionManager.reasksOnceThenCancelsAmbiguousAnswers", async () => {
+    const root = tempRoot();
+    const { manager, userExchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = userExchanges[0] as UserInputExchange;
+    void exchange.requestUserInput({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      toolCallId: "call-1",
+      itemId: "item-1",
+      viewCursor: "head-1",
+      userInputId: "ui-1",
+      questions: [{
+        id: "q-color",
+        header: "Pick a color",
+        question: "Which color?",
+        options: [{ label: "Blue" }, { label: "Red" }],
+      }],
+    });
+
+    const reask = await manager.consumeConversationalAnswer("ses_oc_1", "yellow");
+    expect(reask).toMatchObject({ settledLast: false });
+    expect(reask?.text).toContain("yellow");
+    expect(exchange.pendingUserInputIds()).toEqual(["ui-1"]);
+
+    const cancelled = await manager.consumeConversationalAnswer("ses_oc_1", "huh");
+    expect(cancelled).toMatchObject({ settledLast: true });
+    expect(cancelled?.text).toContain("Cancelled");
+    expect(cancelled?.text).toContain("no valid option was given");
+    expect(exchange.pendingUserInputIds()).toEqual([]);
+    expect(first.joinParkedTurnId).toBe("turn-1");
+    await manager.close();
+  });
+
+  test("sessionManager.cancelsMultiSelectQuestionsItCannotCollect", async () => {
+    const root = tempRoot();
+    const { manager, userExchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = userExchanges[0] as UserInputExchange;
+    void exchange.requestUserInput({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      toolCallId: "call-1",
+      itemId: "item-1",
+      viewCursor: "head-1",
+      userInputId: "ui-1",
+      questions: [{
+        id: "q-toppings",
+        header: "Pick toppings",
+        question: "Which toppings?",
+        options: [{ label: "Cheese" }, { label: "Basil" }],
+        selection: { mode: "multiple", maxSelections: 2 },
+      }],
+    });
+
+    const outcome = await manager.consumeConversationalAnswer("ses_oc_1", "cheese, basil");
+    expect(outcome).toMatchObject({ settledLast: true });
+    expect(outcome?.text).toContain("multiple selections");
+    expect(exchange.pendingUserInputIds()).toEqual([]);
     await manager.close();
   });
 

@@ -68,6 +68,7 @@ function fakeRuntime(options: {
   settleMatched?: string[];
   hasParkedApprovals?: boolean;
   conversationalVerdict?: { text: string; settledLast: boolean } | null;
+  conversationalAnswer?: { text: string; settledLast: boolean } | null;
   gateEventsAfter?: { count: number; release: Promise<void> };
 } = {}) {
   const commands: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -184,6 +185,7 @@ function fakeRuntime(options: {
   };
   const settledResponses: Array<{ sessionID: string; responses: Array<{ approvalId: string; approved: boolean }> }> = [];
   const consumedVerdicts: Array<{ sessionID: string; text: string }> = [];
+  const consumedAnswers: Array<{ sessionID: string; text: string }> = [];
   const runtime: MuseLanguageRuntime = {
     selectionIndex,
     videoChunkBytes: options.videoChunkBytes,
@@ -206,6 +208,12 @@ function fakeRuntime(options: {
         return options.conversationalVerdict;
       },
     } : {}),
+    ...(options.conversationalAnswer !== undefined ? {
+      async consumeConversationalAnswer(sessionID: string, text: string) {
+        consumedAnswers.push({ sessionID, text });
+        return options.conversationalAnswer;
+      },
+    } : {}),
   };
   return {
     runtime,
@@ -217,6 +225,7 @@ function fakeRuntime(options: {
     cursorUpdates,
     settledResponses,
     consumedVerdicts,
+    consumedAnswers,
     get released() { return released; },
     releasedPromise,
     get subscriptionReturns() { return subscriptionReturns; },
@@ -1028,6 +1037,41 @@ describe("Muse LanguageModelV3 bridge", () => {
     expect(deltas[0]).toContain("Recorded: Allow once");
     expect(deltas.join("")).toContain("Probe answer");
     expect(deltas.join("")).not.toContain("Return the probe answer.");
+  });
+
+  test("languageModel.verdictsTakePriorityOverAnswers", async () => {
+    const fake = fakeRuntime({
+      events: textEvents("turn-parked"),
+      conversationalVerdict: { text: "Recorded: Allow once.", settledLast: true },
+      conversationalAnswer: { text: "Recorded: Blue.", settledLast: true },
+      joinParkedTurnId: "turn-parked",
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const parts: Array<Record<string, unknown>> = [];
+    for await (const part of result.stream) parts.push(part as unknown as Record<string, unknown>);
+
+    expect(fake.consumedVerdicts).toHaveLength(1);
+    expect(fake.consumedAnswers).toEqual([]);
+    const deltas = parts.filter((part) => part.type === "text-delta").map((part) => (part as { delta: string }).delta);
+    expect(deltas[0]).toContain("Recorded: Allow once.");
+  });
+
+  test("languageModel.answerTextReachesConsumeInsteadOfStartingATurn", async () => {
+    const fake = fakeRuntime({
+      events: textEvents(),
+      conversationalVerdict: null,
+      conversationalAnswer: { text: "Which color? A. Blue", settledLast: false },
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const parts: Array<Record<string, unknown>> = [];
+    for await (const part of result.stream) parts.push(part as unknown as Record<string, unknown>);
+
+    expect(fake.consumedAnswers).toEqual([{ sessionID: "ses_model_test", text: "Return the probe answer." }]);
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+    expect(parts.map((part) => part.type)).toEqual(["stream-start", "text-start", "text-delta", "text-end", "finish"]);
+    expect((parts[2] as { delta: string }).delta).toContain("Which color?");
   });
 
   test("languageModel.syntheticVerdictGeneratesTextWithoutATurn", async () => {

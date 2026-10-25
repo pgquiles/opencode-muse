@@ -10,6 +10,14 @@ import {
   renderConversationalApprovalPrompt,
   type ConversationalChoice,
 } from "../msp/approvals.js";
+import {
+  isMultiSelectQuestion,
+  matchConversationalChoice as matchUserInputChoice,
+  presentableQuestion,
+  renderConversationalQuestionPrompt,
+  type UserInputAnswer,
+  type UserInputQuestion,
+} from "../msp/user-input.js";
 import type { ApprovalExchange } from "../msp/approvals.js";
 import type { ApprovalResponse } from "../model/prompt.js";
 import {
@@ -25,7 +33,7 @@ import type { LockLease, WorkspaceLock } from "./workspace-lock.js";
 import type { MuseTurnSession } from "../model/language-model.js";
 import type { AgentContextResult } from "../model/agent-context.js";
 
-export interface MuseSessionHost extends Pick<MspHost, "command" | "request" | "subscribe" | "mintCommandId" | "close" | "approvals"> {
+export interface MuseSessionHost extends Pick<MspHost, "command" | "request" | "subscribe" | "mintCommandId" | "close" | "approvals" | "userInput"> {
   initializeResult: Record<string, unknown>;
 }
 
@@ -343,11 +351,21 @@ export class MuseSessionManager {
       if (joinTurnId === undefined && parkedTurnId === binding.activeTurnId) joinTurnId = parkedTurnId;
     }
     if (joinTurnId !== undefined) {
-      binding.joinParkedTurnId = joinTurnId;
-      binding.streamEpoch = (binding.streamEpoch ?? 0) + 1;
-      binding.handoffLeaseToJoiner = true;
+      this.armJoin(binding, joinTurnId);
     }
     return matched;
+  }
+
+  /**
+   * Arm the join only for verdicts that belong to the still-active turn;
+   * a verdict for a dead turn is delivered but never joined.
+   */
+  private armJoin(binding: ManagedBinding, turnId: string | undefined): boolean {
+    if (turnId === undefined || turnId !== binding.activeTurnId) return false;
+    binding.joinParkedTurnId = turnId;
+    binding.streamEpoch = (binding.streamEpoch ?? 0) + 1;
+    binding.handoffLeaseToJoiner = true;
+    return true;
   }
 
   /**
@@ -435,6 +453,129 @@ export class MuseSessionManager {
     return {
       choices: found.choices,
       ...(found.toolName ? { toolName: found.toolName } : {}),
+    };
+  }
+
+  /**
+   * Interpret a user message as an answer for the oldest pending userInput
+   * question. Returns null when nothing pends (normal turn flow). Otherwise
+   * the text carries the outcome: a recorded echo (plus the next question
+   * when more remain), a re-ask, or a cancellation. `settledLast` is true
+   * only when no requests remain, in which case the caller joins the parked
+   * turn; anything else ends synthetically. Ambiguity is re-asked once,
+   * then cancelled — never fabricated. Multi-select and option-less
+   * questions cancel immediately with a reason.
+   */
+  async consumeConversationalAnswer(
+    openCodeSessionId: string,
+    text: string,
+  ): Promise<{ text: string; settledLast: boolean } | null> {
+    const binding = this.bindings.get(openCodeSessionId);
+    if (!binding) return null;
+    const pending = binding.host.userInput.describePending();
+    if (pending.length === 0) return null;
+    const oldest = pending[0]!;
+    const current = oldest.questions.find((question) => !oldest.answeredQuestionIds.includes(question.id));
+    if (!current) {
+      // Every question already answered but the request never settled:
+      // settle with the accumulated answers rather than asking again.
+      return this.finishUserInputAnswers(binding, oldest.userInputId, oldest.answers, "Recorded.");
+    }
+    if (presentableQuestion(current) === null) {
+      // Nothing the lettered prompt can collect: cancel with a reason.
+      const reason = current.options.length === 0
+        ? `"${current.header}" offered no usable options`
+        : `"${current.header}" needs multiple selections, which cannot be collected here`;
+      this.settleUserInputCancelled(binding, oldest.userInputId);
+      return this.userInputOutcome(binding, `Cancelled ${oldest.toolName ? `\`${oldest.toolName}\`` : "the request"} — ${reason}.`);
+    }
+    const matched = matchUserInputChoice(current.options, text);
+    if (matched) {
+      const appended = binding.host.userInput.appendAnswer(oldest.userInputId, {
+        questionId: current.id,
+        selectedLabel: matched.label,
+      });
+      if (appended && appended.remaining === 0) {
+        return this.finishUserInputAnswers(binding, oldest.userInputId, appended.answers, `Recorded: ${matched.label}.`);
+      }
+      const next = oldest.questions.find((question) =>
+        !oldest.answeredQuestionIds.includes(question.id) && question.id !== current.id
+      ) ?? oldest.questions.find((question) => question.id !== current.id);
+      return {
+        text: `Recorded: ${matched.label}.\n\n${renderConversationalQuestionPrompt({ question: next!, attempt: 0 })}`,
+        settledLast: false,
+      };
+    }
+    const attempts = binding.host.userInput.noteVerdictAttempt(oldest.userInputId);
+    if (attempts === 0) {
+      return {
+        text: renderConversationalQuestionPrompt({ question: current, attempt: 1, received: text }),
+        settledLast: false,
+      };
+    }
+    this.settleUserInputCancelled(binding, oldest.userInputId);
+    return this.userInputOutcome(
+      binding,
+      `Cancelled ${oldest.toolName ? `\`${oldest.toolName}\`` : "the request"} — no valid option was given.`,
+    );
+  }
+
+  private finishUserInputAnswers(
+    binding: ManagedBinding,
+    userInputId: string,
+    answers: UserInputAnswer[],
+    recorded: string,
+  ): { text: string; settledLast: boolean } {
+    const pendingTurnId = binding.host.userInput.describePending()
+      .find((entry) => entry.userInputId === userInputId)?.turnId;
+    if (binding.host.userInput.settleAnswer(userInputId, answers)) {
+      this.armJoin(binding, pendingTurnId);
+    }
+    return this.userInputOutcome(binding, recorded);
+  }
+
+  private settleUserInputCancelled(binding: ManagedBinding, userInputId: string): void {
+    const pendingTurnId = binding.host.userInput.describePending()
+      .find((entry) => entry.userInputId === userInputId)?.turnId;
+    if (binding.host.userInput.settleCancelled(userInputId)) {
+      this.armJoin(binding, pendingTurnId);
+    }
+  }
+
+  private userInputOutcome(
+    binding: ManagedBinding,
+    recorded: string,
+  ): { text: string; settledLast: boolean } {
+    const remaining = binding.host.userInput.describePending();
+    if (remaining.length === 0) return { text: `${recorded} Resuming…`, settledLast: true };
+    const next = this.oldestUnansweredQuestion(remaining[0]!);
+    return {
+      text: `${recorded}\n\n${next
+        ? renderConversationalQuestionPrompt({ question: next, attempt: 0 })
+        : "The next question cannot be presented and will be cancelled on your reply."}`,
+      settledLast: false,
+    };
+  }
+
+  private oldestUnansweredQuestion(
+    entry: { questions: UserInputQuestion[]; answeredQuestionIds: string[] },
+  ): UserInputQuestion | undefined {
+    return entry.questions.find((question) => !entry.answeredQuestionIds.includes(question.id));
+  }
+
+  /** Oldest still-unanswered presentable question, for prompt rendering. */
+  describeCurrentUserInputQuestion(
+    openCodeSessionId: string,
+  ): { question: UserInputQuestion; toolName?: string } | undefined {
+    const binding = this.bindings.get(openCodeSessionId);
+    const oldest = binding?.host.userInput.describePending()[0];
+    if (!oldest) return undefined;
+    const current = this.oldestUnansweredQuestion(oldest);
+    const presented = current ? presentableQuestion(current) : null;
+    if (!presented) return undefined;
+    return {
+      question: presented,
+      ...(oldest.toolName ? { toolName: oldest.toolName } : {}),
     };
   }
 

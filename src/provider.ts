@@ -142,6 +142,8 @@ export async function createProviderPlugin(
         settleApprovalResponses: (sessionID, responses) => sessions.settleApprovalResponses(sessionID, responses),
         hasParkedApprovals: (sessionID) => sessions.hasParkedApprovals(sessionID),
         disarmParkedJoin: (sessionID) => sessions.disarmParkedJoin(sessionID),
+        consumeConversationalAnswer: (sessionID, text) => sessions.consumeConversationalAnswer(sessionID, text),
+        describeCurrentUserInputQuestion: (sessionID) => sessions.describeCurrentUserInputQuestion(sessionID),
         consumeConversationalVerdict: (sessionID, text) => sessions.consumeConversationalVerdict(sessionID, text),
         describePendingApproval: (sessionID, approvalId, requirementId) =>
           sessions.describePendingApproval(sessionID, approvalId, requirementId),

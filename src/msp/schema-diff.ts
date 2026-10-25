@@ -28,12 +28,17 @@ export const CURATED_METHODS: readonly string[] = [
   "media/upload", // src/model/language-model.ts video uploads
   "view/subscribe", // src/msp/host.ts cursor replay via MspClient
   "view/page", // src/model/language-model.ts view/gap recovery
+  "userInput/answer", // src/msp/host.ts answers conversational verdicts
+  "userInput/cancel", // src/msp/host.ts fails conversational verdicts closed
 ];
 
-/** Server-to-client requests the bridge explicitly fails closed on (no fabricated answers). */
+/**
+ * Server-to-client requests the bridge parks for a conversational verdict
+ * instead of failing with method-not-found (no fabricated answers).
+ */
 export const CURATED_REQUESTS: readonly string[] = [
-  "approval/request", // src/msp/host.ts answers method-not-found
-  "userInput/request", // src/msp/host.ts answers method-not-found
+  "approval/request", // src/msp/host.ts parks for a conversational verdict
+  "userInput/request", // src/msp/host.ts parks for a conversational verdict
 ];
 
 /** Notifications the bridge consumes in src/model/stream.ts and src/model/language-model.ts. */

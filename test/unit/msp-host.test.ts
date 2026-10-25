@@ -121,7 +121,7 @@ describe("MspHost", () => {
     await host.close();
   });
 
-  test("mspHostFailsClosedOnStructuredUserInputWithoutFabricatingAnAnswer", async () => {
+  test("mspHostParksStructuredUserInputWithoutFabricatingAnAnswer", async () => {
     const transport = new FakeMspTransport((request) => request.method === "initialize"
       ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }
       : {});
@@ -150,19 +150,18 @@ describe("MspHost", () => {
         viewCursor: "cursor-1",
       },
     });
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      if (transport.writtenFrames.some((frame) =>
-        typeof frame === "object" && frame !== null && "id" in frame && frame.id === 992,
-      )) break;
-      await new Promise((resolve) => setTimeout(resolve, 1));
+    // A parked request acks nothing until a verdict settles it: poll the
+    // exchange instead of the wire.
+    for (let attempt = 0; attempt < 50 && host.userInput.pendingUserInputIds().length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
     }
 
-    const response = transport.writtenFrames.find((frame) =>
-      typeof frame === "object" && frame !== null && "id" in frame && frame.id === 992,
-    ) as { error?: { code?: number }; result?: unknown } | undefined;
-    expect(response?.error?.code).toBe(-32601);
-    expect(response?.result).toBeUndefined();
-    expect(transport.requests.some((request) => request.method === "userInput/answer")).toBe(false);
+    // The request no longer fails with method-not-found: it parks for a real
+    // conversational verdict instead of inventing an answer.
+    expect(host.userInput.pendingUserInputIds()).toEqual(["input-1"]);
+    expect(transport.requests.some((request) =>
+      request.method === "userInput/answer" || request.method === "userInput/cancel",
+    )).toBe(false);
     await host.close();
   });
 
@@ -442,6 +441,92 @@ describe("MspHost", () => {
       await new Promise((resolve) => setTimeout(resolve, 2));
     }
     expect(transport.requests.some((request) => request.method === "approval/decide")).toBe(false);
+    await host.close();
+  });
+
+  test("mspHost.answersAConversationalUserInputChoice", async () => {
+    const transport = new FakeMspTransport((request) => request.method === "initialize"
+      ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }
+      : {});
+    const fake = fakeHandshake(transport);
+    const host = await MspHost.start({ approvalTimeoutMs: 50 }, { createHandshake: () => fake.handshake });
+    transport.deliver({
+      jsonrpc: "2.0",
+      id: 998,
+      method: "userInput/request",
+      params: {
+        sessionId: "ses-1",
+        turnId: "turn-1",
+        toolCallId: "call-14",
+        toolName: "shell",
+        itemId: "item-1",
+        viewCursor: "head-1",
+        userInputId: "ui-1",
+        questions: [{
+          id: "q-color",
+          header: "Pick a color",
+          question: "Which color?",
+          options: [{ label: "Blue" }, { label: "Red" }],
+        }],
+      },
+    });
+    for (let attempt = 0; attempt < 50 && host.userInput.pendingUserInputIds().length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+
+    expect(host.userInput.settleAnswer("ui-1", [{ questionId: "q-color", selectedLabel: "Blue" }])).toBe(true);
+    for (let attempt = 0; attempt < 50 && !transport.requests.some((request) =>
+      request.method === "userInput/answer"
+    ); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    const answer = transport.requests.find((request) => request.method === "userInput/answer");
+    expect(answer?.params).toMatchObject({
+      sessionId: "ses-1",
+      userInputId: "ui-1",
+      answers: [{ questionId: "q-color", selectedLabel: "Blue" }],
+    });
+    expect(typeof (answer?.params as { commandId?: unknown }).commandId).toBe("string");
+    expect(transport.requests.some((request) => request.method === "userInput/cancel")).toBe(false);
+    await host.close();
+  });
+
+  test("mspHost.cancelsUserInputWithAnInventedLabel", async () => {
+    const transport = new FakeMspTransport((request) => request.method === "initialize"
+      ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }
+      : {});
+    const fake = fakeHandshake(transport);
+    const host = await MspHost.start({ approvalTimeoutMs: 50 }, { createHandshake: () => fake.handshake });
+    transport.deliver({
+      jsonrpc: "2.0",
+      id: 999,
+      method: "userInput/request",
+      params: {
+        sessionId: "ses-1",
+        turnId: "turn-1",
+        toolCallId: "call-15",
+        itemId: "item-1",
+        viewCursor: "head-1",
+        userInputId: "ui-2",
+        questions: [{
+          id: "q-color",
+          header: "Pick a color",
+          question: "Which color?",
+          options: [{ label: "Blue" }],
+        }],
+      },
+    });
+    for (let attempt = 0; attempt < 50 && host.userInput.pendingUserInputIds().length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+
+    expect(host.userInput.settleAnswer("ui-2", [{ questionId: "q-color", selectedLabel: "Invented" }])).toBe(true);
+    for (let attempt = 0; attempt < 50 && !transport.requests.some((request) =>
+      request.method === "userInput/cancel"
+    ); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    expect(transport.requests.some((request) => request.method === "userInput/answer")).toBe(false);
     await host.close();
   });
 

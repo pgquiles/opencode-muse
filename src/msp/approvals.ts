@@ -118,15 +118,16 @@ function normalizeChoiceText(value: string): string {
  * Match free text to exactly one presented choice by letter, number, label,
  * or letter+label (case/punctuation/whitespace-insensitive). Anything else —
  * unknown forms, ties across choices, meaning-based pleas — returns null so
- * the caller re-asks once, then denies. Ambiguity never resolves to approve.
+ * the caller re-asks once, then fails closed. Ambiguity never resolves to an
+ * approval. Generic over the choice shape so userInput options reuse it.
  */
-export function matchConversationalChoice(
-  choices: readonly ConversationalChoice[],
+export function matchConversationalChoice<T extends { label: string }>(
+  choices: readonly T[],
   input: string,
-): ConversationalChoice | null {
+): T | null {
   const wanted = normalizeChoiceText(input);
   if (wanted === "") return null;
-  let matched: ConversationalChoice | null = null;
+  let matched: T | null = null;
   for (let index = 0; index < choices.length; index += 1) {
     const choice = choices[index]!;
     const forms = new Set([

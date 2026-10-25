@@ -19,6 +19,7 @@ import {
 } from "../errors.js";
 import { MspClient, type MspConnectionLike, type MspNotification, type MspServerRequest } from "./client.js";
 import { ApprovalExchange, conversationalChoices, selectApprovalChoiceId, type ApprovalVerdict } from "./approvals.js";
+import { UserInputExchange, validUserInputAnswers, type UserInputAnswer, type UserInputVerdict } from "./user-input.js";
 
 export interface MspHostRuntime {
   connection: MspConnectionLike;
@@ -129,6 +130,8 @@ export class MspHost {
   readonly fingerprintWarning?: FingerprintWarning;
   /** Per-session latch for approval round trips; settled by OpenCode verdicts. */
   readonly approvals: ApprovalExchange;
+  /** Per-session latch for structured userInput round trips; same discipline. */
+  readonly userInput: UserInputExchange;
   readonly exited: Promise<MspHostExit>;
   private state: "open" | "closing" | "closed" = "open";
   private closePromise: Promise<void> | undefined;
@@ -143,6 +146,7 @@ export class MspHost {
     this.initializeResult = runtime.initializeResult;
     this.fingerprintWarning = fingerprintWarning;
     this.approvals = new ApprovalExchange({ timeoutMs: options.approvalTimeoutMs ?? 10 * 60 * 1000 });
+    this.userInput = new UserInputExchange({ timeoutMs: options.approvalTimeoutMs ?? 10 * 60 * 1000 });
     this.onApprovalParked = options.onApprovalParked;
     this.onApprovalUnparked = options.onApprovalUnparked;
     const customServerRequest = options.onServerRequest;
@@ -259,6 +263,7 @@ export class MspHost {
 
   private async handleServerRequest(request: MspServerRequest): Promise<Record<string, unknown>> {
     if (request.method === "approval/request") return this.handleApprovalRequest(request.params);
+    if (request.method === "userInput/request") return this.handleUserInputRequest(request.params);
     // Mirror the SDK's own client: answered methods ack with {}; every other
     // server-request method keeps the bare-connection -32601.
     throw new MspError({
@@ -320,6 +325,45 @@ export class MspHost {
     }
     this.approvals.markDecided(stage.approvalId, stage.currentRequirementId);
     this.onApprovalUnparked?.(stage.approvalId);
+    return {};
+  }
+
+  private async handleUserInputRequest(params: Record<string, unknown> | undefined): Promise<Record<string, unknown>> {
+    let verdict: UserInputVerdict;
+    try {
+      verdict = await this.userInput.requestUserInput(params);
+    } catch {
+      // Unroutable (malformed) requests are dropped like the SDK drops them;
+      // the server holds the turn under its own default.
+      return {};
+    }
+    if ("alreadyDecided" in verdict) return {};
+    const stage = verdict.params;
+    // Conversational answers name exact offered labels; re-validate before
+    // sending. Anything else — invented labels, timeouts, explicit cancels —
+    // fails closed via userInput/cancel rather than answering.
+    try {
+      if ("answers" in verdict && validUserInputAnswers(stage.questions, verdict.answers)) {
+        await this.command("userInput/answer", {
+          commandId: this.client.mintCommandId(),
+          sessionId: stage.sessionId,
+          userInputId: stage.userInputId,
+          answers: verdict.answers,
+        });
+      } else {
+        await this.command("userInput/cancel", {
+          commandId: this.client.mintCommandId(),
+          sessionId: stage.sessionId,
+          userInputId: stage.userInputId,
+          reason: "timedOut" in verdict ? "conversational answer timed out" : "cancelled",
+        });
+      }
+    } catch {
+      // The turn may already be gone (cancel raced the verdict). Mark the
+      // stage so a re-sent request does not re-park a dead round trip; the
+      // request plane is still acked.
+    }
+    this.userInput.markDecided(stage.userInputId);
     return {};
   }
 
