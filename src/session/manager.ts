@@ -21,6 +21,16 @@ import {
 import type { ApprovalExchange } from "../msp/approvals.js";
 import type { ApprovalResponse } from "../model/prompt.js";
 import {
+  composeWorktreeNotices,
+  countSharedSessions,
+  defaultWorktreeVcs,
+  findOwnWorktree,
+  isWorktreeUnsupportedRejection,
+  purgeWorktreeIfEmpty,
+  type ManagedWorktree,
+  type WorktreeVcs,
+} from "../msp/worktree.js";
+import {
   MspCommandRejectedError,
   MuseApprovalPendingError,
   MuseRecoveryChoiceRequiredError,
@@ -46,6 +56,8 @@ export interface MuseSessionManagerOptions {
   contributorMode?: ContributorMode;
   createHost?(options: { museBin?: string; cwd: string; args: readonly string[]; capabilities?: Parameters<MspHandshake["initialize"]>[0]["capabilities"] }): Promise<MuseSessionHost>;
   videoChunkBytes?: number;
+  /** Worktree lifecycle seam (#34); defaults to git. */
+  worktreeVcs?: WorktreeVcs;
 }
 
 interface ManagedBinding extends Omit<MuseTurnSession, "host"> {
@@ -104,10 +116,12 @@ export class MuseSessionManager {
   private readonly contextBySession = new Map<string, AgentContextResult>();
   private readonly contributorMode: ContributorMode;
   private readonly createHost: NonNullable<MuseSessionManagerOptions["createHost"]>;
+  private readonly worktreeVcs: WorktreeVcs;
   private closed = false;
 
   constructor(private readonly options: MuseSessionManagerOptions) {
     this.contributorMode = options.contributorMode ?? "on";
+    this.worktreeVcs = options.worktreeVcs ?? defaultWorktreeVcs;
     this.createHost = options.createHost ?? (async ({ museBin, cwd, args, capabilities }) => MspHost.start({
       museBin,
       cwd,
@@ -177,14 +191,17 @@ export class MuseSessionManager {
         museBin: this.options.museBin,
         cwd: canonicalDirectory,
         args: baseServeArgs(stored?.providerId ?? selected.providerId, this.contributorMode),
-        capabilities: { userInputDialogs: false },
+        capabilities: { userInputDialogs: false, experimentalApi: true },
       });
       const durability = host.initializeResult.sessionDurability;
       if (stored && durability === "ephemeral") throw new MuseRecoveryChoiceRequiredError();
 
+      const experimentalWorktrees = host.initializeResult.experimentalApi === true;
       let museSessionId: string;
       let viewCursor: string | undefined;
       let replayAfterCursor: string | undefined;
+      let worktree: ManagedWorktree | undefined;
+      const sessionNotices: string[] = [];
       if (stored && durability !== "ephemeral") {
         const resumed = await host.command("session/resume", {
           commandId: host.mintCommandId(),
@@ -199,8 +216,22 @@ export class MuseSessionManager {
         viewCursor = cursorFrom(resumed);
         // session/resume attaches at its returned head; avoid a redundant
         // view/subscribe at that same cursor. Task 12 owns older-cursor replay.
+        if (experimentalWorktrees) {
+          // Best-effort rediscovery: a restarted bridge reattaches the label
+          // but never fails the resume when the surface is unavailable.
+          try {
+            const listed = await host.request("worktree/list", { workspaceRoot: canonicalDirectory });
+            const own = findOwnWorktree(listed, museSessionId);
+            if (own?.path) {
+              worktree = { path: own.path, branch: own.branch };
+              sessionNotices.push(...composeWorktreeNotices({ workspaceRoot: canonicalDirectory, worktree: own }));
+            }
+          } catch {
+            // The session runs on; the label stays absent.
+          }
+        }
       } else {
-        const start = await host.command("session/start", {
+        const startParams = {
           commandId: host.mintCommandId(),
           workspaceRoot: canonicalDirectory,
           providerId: selected.providerId,
@@ -209,11 +240,55 @@ export class MuseSessionManager {
           // the loop; the host default would let side-effectful actions
           // through silently.
           approvalMode: "onRequest",
-        });
+        };
+        let start: Record<string, unknown>;
+        let worktreeAttempted = false;
+        if (experimentalWorktrees) {
+          worktreeAttempted = true;
+          try {
+            start = await host.command("session/start", { ...startParams, worktree: { mode: "create" } });
+          } catch (error) {
+            if (!isWorktreeUnsupportedRejection(error)) throw error;
+            // A changed payload must never reuse the rejected command's id
+            // (the host treats id+payload as the idempotency key).
+            start = await host.command("session/start", { ...startParams, commandId: host.mintCommandId() });
+            sessionNotices.push(
+              ...composeWorktreeNotices({
+                workspaceRoot: canonicalDirectory,
+                fallbackReason: (error as MspCommandRejectedError).mspKind,
+              }),
+            );
+          }
+        } else {
+          start = await host.command("session/start", startParams);
+        }
         const startedSessionId = sessionIdFrom(start);
         if (!startedSessionId) throw new MuseRecoveryChoiceRequiredError();
         museSessionId = startedSessionId;
         viewCursor = cursorFrom(start);
+        if (worktreeAttempted && !sessionNotices.length) {
+          // Verify-and-bind: resolve the managed path and the sharing
+          // picture. A failed verify leaves a working session whose
+          // worktree can neither be labeled nor purged.
+          try {
+            const listed = await host.request("worktree/list", { workspaceRoot: canonicalDirectory });
+            const own = findOwnWorktree(listed, museSessionId);
+            const sharedOthers = countSharedSessions(listed, canonicalDirectory, museSessionId);
+            const baseSha = await this.worktreeVcs.baseCommit(canonicalDirectory);
+            if (own?.path) worktree = { path: own.path, branch: own.branch, baseSha };
+            sessionNotices.push(
+              ...composeWorktreeNotices({
+                workspaceRoot: canonicalDirectory,
+                worktree: own,
+                sharedOthers,
+              }),
+            );
+          } catch {
+            sessionNotices.push(
+              `[Muse session workspace: worktree verification unavailable; merging back through normal source control.]`,
+            );
+          }
+        }
       }
 
       const initialSelection = stored
@@ -228,6 +303,8 @@ export class MuseSessionManager {
         workspaceFingerprint: fingerprint,
         viewCursor,
         replayAfterCursor,
+        worktree,
+        sessionNotices,
         emittedApprovalPrompts: new Set<string>(),
         streamEpoch: 0,
         currentSelection: initialSelection,
@@ -600,6 +677,9 @@ export class MuseSessionManager {
     this.closed = true;
     const bindings = [...this.bindings.values()];
     this.bindings.clear();
+    // Purge-only-provably-empty (#34): dirty worktrees are left for the
+    // human to merge; purge never fails the shutdown.
+    await Promise.all(bindings.map((binding) => purgeWorktreeIfEmpty(this.worktreeVcs, binding.worktree)));
     await Promise.all(bindings.map(async (binding) => {
       try {
         await binding.host.close?.();

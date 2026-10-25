@@ -22,6 +22,7 @@ import { MuseStreamMapper, type FlatMuseUsage } from "./stream.js";
 import type { MuseModelSelection, RequestContext } from "../types.js";
 import type { UserInputQuestion as UserInputQuestionShape } from "../msp/user-input.js";
 import type { TranscribeAudio } from "../msp/transcribe.js";
+import { pendingFirstTurnNotices, resolveStagingRoot } from "../msp/worktree.js";
 import type { StagePdfOutcome } from "../msp/pdf.js";
 
 export interface MuseTurnHost {
@@ -54,6 +55,10 @@ export interface MuseTurnSession {
   updateCursor?(cursor: string): Promise<void>;
   recordTurnCompleted?(turnId: string, terminal: string, usage?: Record<string, unknown>): Promise<void>;
   release?(): Promise<void>;
+  /** Session workspace override (#34); PDF staging follows the session onto its worktree. Unverified path stays undefined. */
+  worktree?: { path?: string; branch?: string };
+  /** Bridge-authored first-turn labels; emitted once, never replayed. */
+  sessionNotices?: string[];
   /** Cross-turn chunk dedup for approval prompts; shared per OpenCode session. */
   emittedApprovalPrompts?: Set<string>;
   /** Set by the session manager when this call must attach to a parked turn. */
@@ -559,13 +564,12 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     if (context.kind !== "primary") throw new MuseUnsupportedRequestError(context.kind);
     const supportedOptions = validateModelOptions(options);
     if (!supportedOptions.ok) throw inputErrorToException(supportedOptions.error);
-    const stagePdf = runtime.stagePdfAttachment
-      ? (bytes: Uint8Array) => runtime.stagePdfAttachment!(context.directory, bytes)
-      : undefined;
     const initialExtraction = await extractTurnInput(options.prompt, [], [], {
       signal: options.abortSignal,
       transcribeAudio: runtime.transcribeAudioClip,
-      stagePdfAttachment: stagePdf,
+      stagePdfAttachment: runtime.stagePdfAttachment
+        ? (bytes: Uint8Array) => runtime.stagePdfAttachment!(context.directory, bytes)
+        : undefined,
     });
     if (!initialExtraction.ok) throw inputErrorToException(initialExtraction.error);
     const approvalResponses = extractApprovalResponses(options.prompt);
@@ -603,8 +607,19 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
       options.prompt,
       observedCompaction ? [] : session.previousTranscriptFingerprints,
       session.contextAllowlist,
-      { signal: options.abortSignal, transcribeAudio: runtime.transcribeAudioClip, stagePdfAttachment: stagePdf },
+      {
+        signal: options.abortSignal,
+        transcribeAudio: runtime.transcribeAudioClip,
+        stagePdfAttachment: runtime.stagePdfAttachment
+          ? (bytes: Uint8Array) =>
+              runtime.stagePdfAttachment!(resolveStagingRoot(session.worktree?.path, context.directory), bytes)
+          : undefined,
+      },
     );
+    if (extracted.ok) {
+      const notices = pendingFirstTurnNotices(session.sessionNotices, session.previousTranscriptFingerprints, observedCompaction);
+      if (notices.length > 0) extracted.parts.unshift({ type: "text", text: notices.join("\n") });
+    }
     if (!extracted.ok) {
       if (joining && extracted.error.code === "no-new-user-input") {
         try {

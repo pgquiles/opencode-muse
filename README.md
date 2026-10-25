@@ -16,7 +16,7 @@ Add the published package to your project-level `opencode.jsonc` (or
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["opencode-muse@0.6.0"],
+  "plugins": ["opencode-muse@0.7.0"],
 }
 ```
 
@@ -130,6 +130,15 @@ the billed lane with `muse usage`. See
   unanswered question renders as a lettered list and your next message
   answers it the same forgiving-match way, with the question echoed back on
   success. See [#31](https://github.com/pgquiles/opencode-muse/issues/31).
+- Work each OpenCode session on its own server-managed worktree instead of
+  sharing the checkout: concurrent sessions stop serializing at the
+  workspace lock, and the human merges worktrees back through normal
+  source control (the bridge never auto-merges). Requires a trusted
+  workspace and a CLI serving the experimental worktree surface;
+  otherwise the single-writer lock applies with a notice. Empty
+  worktrees are removed when the provider unloads; anything with
+  unique work is left for you. See
+  [#34](https://github.com/pgquiles/opencode-muse/issues/34).
 - Stay working across Muse CLI updates: capability checks against the pinned
   CLI mean a newer CLI fingerprint starts with a recorded warning instead of
   failing, and only a missing/malformed fingerprint or an unsupported
@@ -174,9 +183,10 @@ the billed lane with `muse usage`. See
   closed instead of guessing. Contributor catalog rows bill the requested lane
   like every other row. See [Configuration](#configuration) and
   [#29](https://github.com/pgquiles/opencode-muse/issues/29).
-- **Simultaneous work:** The plugin allows only one active writer per
-  workspace, so a new turn may be reported as busy while another is still
-  finishing.
+- **Simultaneous work:** Each OpenCode session gets its own worktree where
+  the CLI supports it (see Features); where worktrees are unavailable the
+  plugin allows only one active writer per workspace, so a new turn may be
+  reported as busy while another is still finishing.
 
 ## Troubleshooting
 

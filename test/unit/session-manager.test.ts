@@ -128,7 +128,7 @@ describe("MuseSessionManager", () => {
       modelId: "wonder",
       workspaceRoot: directory,
     });
-    expect(hostOptions[0]?.capabilities).toEqual({ userInputDialogs: false });
+    expect(hostOptions[0]?.capabilities).toEqual({ userInputDialogs: false, experimentalApi: true });
     expect(await new SessionRegistry({ stateDirectory: root }).get("ses_oc_1", workspaceFingerprint(directory))).toMatchObject({
       museSessionId: first.sessionId,
       providerId: "meta",

@@ -83,8 +83,31 @@ multi-pane use on one checkout serializes.
   write it down).
 - Interplay with #20 (no filesystem rollback on rewind) and #23
   (event-gap recovery) inside worktree-scoped sessions.
-- Remaining live probe: `session/start` with
-  `worktree: {mode: "create"}` in a scratch repo.
+- Live probes complete 2026-10-25: `worktree: {mode: "create"}`
+  binds the session to a managed branch worktree
+  (`muse/session-<id>` under `<repo>/.muse/worktrees/`); untrusted
+  paths fail `workspaceNotTrusted`, trusted checkouts work.
+
+## Accepted decisions (2026-10-25)
+
+1. **Lease protocol: hybrid.** Claim a lockfile per worktree path
+   (`WorkspaceLock` precedent: pid liveness, stale-reclaim) before
+   `create`; verify via `worktree/list`, which doubles as the
+   sharing-warning source.
+2. **Orphans: purge only provably-empty.** No unique commits vs main
+   and clean status → remove; otherwise leave dirty and point the
+   user at the path. Never delete user work.
+3. **Mapping: eager, one worktree per OpenCode session at start.**
+   Lazy mid-session switches and contention-triggered creation were
+   rejected as racy/complex; creation is fast and the orphan rule
+   bounds spam.
+4. **Untrusted workspace: fall back to the single-writer lock** plus
+   a conversational notice (why, how to enable). Never fail a setup
+   that works today.
+5. **Agent awareness: one bridge-authored label at session start**
+   (worktree path, branch, base ref). Labeled, never smuggled.
+6. **Sharing UX: redirect with notice**, not the busy error. The
+   error survives only for creation failure itself.
 
 ## Verification
 
