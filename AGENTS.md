@@ -40,3 +40,4 @@
 ## Release
 
 - npm publishes only through `.github/workflows/publish-npm.yml` (OIDC trusted publishing, triggered by `gh release create`). Never run `npm publish` from a laptop: account 2FA makes it fail with EOTP and the attempt is redundant once the release exists.
+- Keep the README install snippet pinned to the release being cut (`opencode-muse@x.y.z` moves in the same commit as the version bump), so the npm page never names an older plugin.
