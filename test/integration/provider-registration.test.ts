@@ -32,7 +32,6 @@ function fakeContext() {
   const registrations: Array<{ info: Record<string, unknown>; models: readonly Record<string, unknown>[] }> = [];
   const sessionHooks: Array<{ name: string; callback: (input: any) => void; options?: unknown }> = [];
   const aisdkHooks: Array<{ name: string; callback: (input: any) => void; options?: unknown }> = [];
-  const commands: Array<{ name: string; description?: string }> = [];
   let reloads = 0;
   return {
     context: {
@@ -60,18 +59,10 @@ function fakeContext() {
           transform?.({ add: (input) => { registrations.push(input); } });
         },
       },
-      command: {
-        async transform(callback: (editor: { add(input: { name: string; description?: string }): void }) => void) {
-          callback({ add: (input) => { commands.push(input); } });
-          return { dispose: async () => {} };
-        },
-        async reload() {},
-      },
     },
     registrations,
     sessionHooks,
     aisdkHooks,
-    commands,
     get reloads() { return reloads; },
   };
 }
@@ -93,17 +84,6 @@ describe("Muse OpenCode provider registration", () => {
     expect(fake.reloads).toBe(1);
     expect(fake.registrations.at(-1)?.models[0]?.id).toContain("muse-wonder-1.0");
     expect(runtime.catalog.hasLiveCatalog).toBe(true);
-    await runtime.dispose();
-  });
-
-  test("provider.registersTheEffortCommand", async () => {
-    const fake = fakeContext();
-    const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
-      fetchCatalog: async () => liveCatalog(),
-    });
-    await runtime.refreshTask;
-
-    expect(fake.commands.map((command) => command.name)).toEqual(["effort"]);
     await runtime.dispose();
   });
 

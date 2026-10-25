@@ -67,7 +67,6 @@ function fakeRuntime(options: {
   onCancelParked?: () => void;
   settleMatched?: string[];
   hasParkedApprovals?: boolean;
-  effortPin?: string;
   gateEventsAfter?: { count: number; release: Promise<void> };
 } = {}) {
   const commands: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -198,9 +197,6 @@ function fakeRuntime(options: {
     } : {}),
     ...(options.onDisarm ? {
       disarmParkedJoin() { options.onDisarm?.(); },
-    } : {}),
-    ...(options.effortPin !== undefined ? {
-      effortPinForSession() { return options.effortPin; },
     } : {}),
   };
   return {
@@ -981,40 +977,13 @@ describe("Muse LanguageModelV3 bridge", () => {
     return headers;
   }
 
-  test("languageModel.pinFillsTheUntouchedEffortSlot", async () => {
-    const fake = fakeRuntime({ events: textEvents(), effortPin: "low" });
-    const model = createMuseLanguageModel(fake.runtime, modelID);
-    await model.doGenerate(callOptions({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }], headers: headersForVariant() }));
-
-    const start = fake.commands.find((command) => command.method === "turn/start");
-    expect(start?.params).toMatchObject({ reasoningEffort: "low" });
-  });
-
-  test("languageModel.pinFillsTheDefaultVariantSlot", async () => {
-    const fake = fakeRuntime({ events: textEvents(), effortPin: "low" });
-    const model = createMuseLanguageModel(fake.runtime, modelID);
-    await model.doGenerate(callOptions({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }], headers: headersForVariant("default") }));
-
-    const start = fake.commands.find((command) => command.method === "turn/start");
-    expect(start?.params).toMatchObject({ reasoningEffort: "low" });
-  });
-
-  test("languageModel.explicitVariantBeatsThePin", async () => {
-    const fake = fakeRuntime({ events: textEvents(), effortPin: "low" });
+  test("languageModel.appliesTheExplicitRequestVariant", async () => {
+    const fake = fakeRuntime({ events: textEvents() });
     const model = createMuseLanguageModel(fake.runtime, modelID);
     await model.doGenerate(callOptions({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }], headers: headersForVariant("high") }));
 
     const start = fake.commands.find((command) => command.method === "turn/start");
     expect(start?.params).toMatchObject({ reasoningEffort: "high" });
-  });
-
-  test("languageModel.ignoresPinsOutsideTheRowVariants", async () => {
-    const fake = fakeRuntime({ events: textEvents(), effortPin: "max" });
-    const model = createMuseLanguageModel(fake.runtime, modelID);
-    await model.doGenerate(callOptions({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }], headers: headersForVariant() }));
-
-    const start = fake.commands.find((command) => command.method === "turn/start");
-    expect(start?.params).not.toHaveProperty("reasoningEffort");
   });
 
   test("languageModel.cancelWhileParkedDeniesThePendingApproval", async () => {

@@ -404,19 +404,6 @@ describe("MuseSessionManager", () => {
     await manager.close();
   });
 
-  test("sessionManager.storesAndReturnsEffortPinsPerSession", async () => {
-    const root = tempRoot();
-    const { manager } = managerAt(root);
-
-    expect(manager.effortPinForSession("ses_oc_1")).toBeUndefined();
-    manager.setEffortPin("ses_oc_1", "low");
-    expect(manager.effortPinForSession("ses_oc_1")).toBe("low");
-    manager.setEffortPin("ses_oc_1", "high");
-    expect(manager.effortPinForSession("ses_oc_1")).toBe("high");
-    expect(manager.effortPinForSession("ses_oc_2")).toBeUndefined();
-    await manager.close();
-  });
-
   test("sessionManager.settlesApprovalResponsesAndArmsJoinForTheActiveTurn", async () => {
     const root = tempRoot();
     const { manager, calls, exchanges } = managerAt(root);

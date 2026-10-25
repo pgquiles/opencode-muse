@@ -85,7 +85,6 @@ function selectionMatches(
 
 export class MuseSessionManager {
   private readonly bindings = new Map<string, ManagedBinding>();
-  private readonly effortPins = new Map<string, string>();
   private readonly contextBySession = new Map<string, AgentContextResult>();
   private readonly createHost: NonNullable<MuseSessionManagerOptions["createHost"]>;
   private closed = false;
@@ -337,16 +336,6 @@ export class MuseSessionManager {
     return matched;
   }
 
-  /** Pin a reasoning effort for the session; explicit per-turn choices still win. */
-  setEffortPin(openCodeSessionId: string, variant: string): void {
-    this.effortPins.set(openCodeSessionId, variant);
-  }
-
-  /** The session's pinned effort, if the /effort command set one. */
-  effortPinForSession(openCodeSessionId: string): string | undefined {
-    return this.effortPins.get(openCodeSessionId);
-  }
-
   /** True while the binding's active turn is parked awaiting a verdict. */
   hasParkedApprovals(openCodeSessionId: string): boolean {
     const binding = this.bindings.get(openCodeSessionId);
@@ -366,7 +355,6 @@ export class MuseSessionManager {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    this.effortPins.clear();
     const bindings = [...this.bindings.values()];
     this.bindings.clear();
     await Promise.all(bindings.map(async (binding) => {
