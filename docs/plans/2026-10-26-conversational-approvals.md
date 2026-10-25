@@ -69,3 +69,17 @@ native support, resolve approvals conversationally.
 - Live TUI check by the user (approve + deny + gibberish paths), like #28.
 - Retire note: convert to native `tool-approval-request` when core supports
   it (#22); this workaround is then deleted, not dual-maintained.
+
+## Live findings (2026-10-25, Muse 1.4.13, subscription)
+
+- The CLI build rarely emits protocol approvals for safely-testable actions:
+  `echo`, `rm`, and file writes inside and outside the workspace all sailed
+  through; one choiceless `approval/requested` event was observed, never an
+  event with choices. The match → decide → join path is therefore
+  fake-verified only; the fallback notice and prose pass-through are
+  live-verified.
+- Policy stack, discovered live: outside-workspace writes are hard-denied by
+  the sandbox before any approval stage (no event fires), and model-driven
+  asking surfaces as prose, not protocol events. So the event path this
+  flow serves is nearly unreachable in this environment — and the flow is
+  strictly better than the hang it replaces regardless.
