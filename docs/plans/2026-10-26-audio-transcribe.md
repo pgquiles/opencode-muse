@@ -43,18 +43,38 @@ dishonest labeling plus unverified server behavior.
   README must say so (user attaching the file is implicit consent,
   but the billing fact must be written down, not assumed).
 
-## Unknowns (hard-gate probes before implementing)
+## Probe results (2026-10-25, Muse 1.4.13, subscription session)
 
-- Exit codes and stderr shape on: missing file, corrupt/empty audio,
-  silence-only clip, unsupported container, oversized input.
-- Real format coverage beyond m4a/wav (mp3, ogg, webm-audio?) and any
-  size/duration ceiling — probe, do not document guesses.
-- Latency on a realistic clip (sets the spawn timeout and whether
-  sequential-per-clip is acceptable).
-- Billing/usage attribution: does a transcribe call appear in
-  `muse usage`, and under which lane?
-- Concurrent-spawn safety: one transcribe at a time per turn is the
-  v1 proposal; parallelism only if probes show it is safe.
+Contract is clean and machine-readable:
+
+- Success: exit 0, transcript on stdout, stderr empty. wav, mp3, and
+  ogg inputs all transcribe correctly (CLI decodes via local ffmpeg).
+- Unreadable input (missing file, empty file, random bytes, text
+  renamed to `.mp3`): exit 3, `error: ...` on stderr, stdout carries
+  only a bare newline. Message shapes observed: `unreadable clip
+  <FILE>: No such file or directory (os error 2)`, `the file is
+  empty`, `ffmpeg exited 183: ... Invalid data found when processing
+  input`.
+- Audible but wordless input (silence, pure tone): exit 7,
+  `error: no words heard: voice session closed before final
+  transcript` on stderr.
+- Latency ≈ 0.7x clip duration (2.8s clip → 2.1s; 8.5s clip →
+  6.1s). Proposed spawn timeout: `max(60s, 3x clip duration)` from
+  the decoded header — generous, still bounded.
+- Transcript text is nondeterministic across runs (observed `The
+  quick...` vs `The Quick...` on identical bytes). Never assert
+  exact-match on transcript content in tests; match case-insensitively
+  or on word sets.
+- Billing: no observable movement in `muse usage` (window and weekly
+  percentages unchanged across 8 transcribe calls). Meter is too
+  coarse to confirm unmetered vs micro-billed — README must still
+  disclose "billed per your Muse subscription terms, exact metering
+  unconfirmed". PAYG-side price untestable from a subscription
+  session (auth switch 400s); not gated on it.
+
+Remaining (non-gating): oversized-input ceiling unprobed — the spawn
+timeout plus exit-3 mapping covers it behaviorally; size cap
+(`maxMediaBytes` reuse) stays as the backstop.
 
 ## Verification
 
