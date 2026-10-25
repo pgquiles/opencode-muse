@@ -96,3 +96,6 @@ multi-pane use on one checkout serializes.
 - Full gates (build, tests, strict type-check) before commit.
 - Post-v1 by definition: no v1 milestone may depend on this; the
   single-writer lock stays the supported path until this ships.
+- Consumer verified 2026-10-25 (opencode 2.1.4): concurrent
+  same-workspace sessions complete — core does not serialize; the
+  gate is our lock, which #34 replaces with worktrees.
