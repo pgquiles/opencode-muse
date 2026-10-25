@@ -108,6 +108,12 @@ describe("Muse model catalog", () => {
     expect(index.get(models[0]!.id)?.variantsKnown).toBe(false);
   });
 
+  test("catalog.keepsTheDisplayLabelFreeOfEffortSuffixes", () => {
+    const models = buildOpenCodeCatalog(catalog());
+
+    expect(models.map((model) => model.name)).toEqual(["Muse Wonder 1.0", "Muse Spark 1.2"]);
+  });
+
   test("catalog.missingLimitsDisableTheModelInsteadOfInventingLimits", () => {
     const museCatalog = catalog({
       models: [{

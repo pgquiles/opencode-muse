@@ -14,10 +14,11 @@ import { MuseBridgeError } from "./errors.js";
 import { makeCompactionDigest, makeLocalTitle } from "./model/meta.js";
 import { fingerprintCompactionOutput } from "./session/fingerprint.js";
 import { extractAllowedAgentContext } from "./model/agent-context.js";
+import { createEffortCommandHandler } from "./session/effort-command.js";
 
 type ProviderEditor = Parameters<Parameters<Plugin.Context["provider"]["transform"]>[0]>[0];
 
-export type MuseProviderContext = Pick<Plugin.Context, "provider" | "session" | "aisdk"> & {
+export type MuseProviderContext = Pick<Plugin.Context, "provider" | "session" | "aisdk" | "command"> & {
   location: Pick<Plugin.Context["location"], "directory">;
 };
 
@@ -81,6 +82,7 @@ export async function createProviderPlugin(
   });
   let sessionHookRegistration: Awaited<ReturnType<Plugin.Context["session"]["hook"]>> | undefined;
   let languageHookRegistration: Awaited<ReturnType<Plugin.Context["aisdk"]["hook"]>> | undefined;
+  let commandRegistration: Awaited<ReturnType<Plugin.Context["command"]["transform"]>> | undefined;
   const localMetaRegistrations: Array<Awaited<ReturnType<Plugin.Context["session"]["hook"]>>> = [];
   try {
     sessionHookRegistration = await ctx.session.hook("model.request", async (request) => {
@@ -101,8 +103,14 @@ export async function createProviderPlugin(
         settleApprovalResponses: (sessionID, responses) => sessions.settleApprovalResponses(sessionID, responses),
         hasParkedApprovals: (sessionID) => sessions.hasParkedApprovals(sessionID),
         disarmParkedJoin: (sessionID) => sessions.disarmParkedJoin(sessionID),
+        effortPinForSession: (sessionID) => sessions.effortPinForSession(sessionID),
       }, input.model.modelID);
     }, { providerID: MUSE_PROVIDER_ID });
+    commandRegistration = await ctx.command.transform((commands) => {
+      commands.add(createEffortCommandHandler({
+        setEffortPin: (sessionID, variant) => sessions.setEffortPin(sessionID, variant),
+      }));
+    });
     localMetaRegistrations.push(await ctx.session.hook("title", async (input) => {
       input.result = makeLocalTitle(input.messages);
     }, { providerID: MUSE_PROVIDER_ID }));
@@ -119,6 +127,8 @@ export async function createProviderPlugin(
     await registration.dispose();
     // The session hook may have been registered before the language hook failed.
     await sessionHookRegistration?.dispose();
+    await languageHookRegistration?.dispose();
+    await commandRegistration?.dispose();
     await Promise.all(localMetaRegistrations.map((hook) => hook.dispose()));
     throw error;
   }
@@ -164,6 +174,7 @@ export async function createProviderPlugin(
         registration.dispose(),
         sessionHookRegistration?.dispose(),
         languageHookRegistration?.dispose(),
+        commandRegistration?.dispose(),
         ...localMetaRegistrations.map((hook) => hook.dispose()),
         sessions.close(),
       ]);

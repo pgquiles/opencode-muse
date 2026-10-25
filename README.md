@@ -71,6 +71,15 @@ setup placeholder rather than advertising a model that will fail on use.
   supported sessions and replaying available session updates after reconnects.
 - Attach supported images (PNG, JPEG, GIF, WebP) and videos (MP4, MOV) to a
   Muse turn.
+- Pick a reasoning effort per model: an untouched model runs its catalog
+  default (which rotates over time), Ctrl+T cycles the concrete variants
+  (`minimal` … `max`, model-dependent, one way until the model is reselected),
+  `/effort <variant>` pins one for the session (bare `/effort` pins `minimal`;
+  under headless `opencode run` the same text reaches the model as chat instead
+  of executing, so headless callers pin per turn with a `#variant` model suffix:
+  `opencode run --model muse/…#high`). Unknown variants fail the turn instead
+  of guessing. See
+  [#28](https://github.com/pgquiles/opencode-muse/issues/28).
 - Let Muse run its own agent and tools, while the plugin prevents overlapping
   writes to the same workspace.
 

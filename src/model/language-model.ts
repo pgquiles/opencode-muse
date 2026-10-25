@@ -18,6 +18,7 @@ import {
   type ContextFragment,
   type ExtractedTurnPart,
 } from "./prompt.js";
+import { explicitVariant } from "./effort.js";
 import { MuseStreamMapper, type FlatMuseUsage } from "./stream.js";
 import type { MuseModelSelection, RequestContext } from "../types.js";
 
@@ -70,6 +71,7 @@ export interface MuseLanguageRuntime {
   settleApprovalResponses?(sessionID: string, responses: ApprovalResponse[]): Promise<string[]>;
   hasParkedApprovals?(sessionID: string): boolean | Promise<boolean>;
   disarmParkedJoin?(sessionID: string): void;
+  effortPinForSession?(sessionID: string): string | undefined;
 }
 
 export interface MuseTurnExecution {
@@ -533,6 +535,18 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     const session = await runtime.resolveSession(context);
     // Set by the manager when the settled verdicts matched a parked turn.
     const joining = session.joinParkedTurnId !== undefined;
+    // Explicit per-turn variants always win; a pinned effort fills only the
+    // untouched/default slot, and only when the row actually offers it.
+    const pin = runtime.effortPinForSession?.(context.sessionID);
+    const pinned = pin !== undefined
+      && context.museSelection.variantsKnown
+      && context.museSelection.variants.includes(pin)
+      ? pin
+      : undefined;
+    const effort = explicitVariant(options.headers) === undefined
+      ? (pinned ?? context.effort)
+      : context.effort;
+    const turnContext = effort === context.effort ? context : { ...context, effort };
     if (session.contextError) {
       if (joining) runtime.disarmParkedJoin?.(context.sessionID);
       else await session.release?.();
@@ -550,7 +564,7 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     if (!extracted.ok) {
       if (joining && extracted.error.code === "no-new-user-input") {
         try {
-          const execution = await runMuseTurn(context, [], options, {
+          const execution = await runMuseTurn(turnContext, [], options, {
             ...runtime,
             resolveSession: async () => session,
           }, session.previousTranscriptFingerprints);
@@ -573,7 +587,7 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     }
     let execution: MuseTurnExecution;
     try {
-      execution = await runMuseTurn(context, extracted.parts, options, {
+      execution = await runMuseTurn(turnContext, extracted.parts, options, {
         ...runtime,
         resolveSession: async () => session,
       }, extracted.nextTranscriptFingerprints);
