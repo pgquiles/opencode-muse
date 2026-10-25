@@ -41,7 +41,10 @@ EOF
 
 The locally packed package passed provider discovery and a text-turn smoke
 test. Muse models and a text turn were also confirmed in OpenChamber after
-restarting it. The verified Muse CLI and SDK version is 1.4.12.
+restarting it. Verified Muse CLI versions are 1.4.12 and 1.4.13 (the SDK
+stays 1.4.12; a newer CLI fingerprint starts with a recorded warning
+instead of failing). See
+[#21](https://github.com/pgquiles/opencode-muse/issues/21).
 
 ## Authentication
 
@@ -101,9 +104,10 @@ setup placeholder rather than advertising a model that will fail on use.
   warning instead of failing closed; a missing/malformed fingerprint or an
   unsupported envelope version still fails closed. See
   [#21](https://github.com/pgquiles/opencode-muse/issues/21).
-- **Billing and simultaneous work:** Pay-as-you-go behavior has not yet been
-  tested. The plugin also allows only one active writer per workspace, so a
-  new turn may be reported as busy while another is still finishing.
+- **Billing and simultaneous work:** Pay-as-you-go catalog and text turns pass
+  on Muse 1.4.13 (see the compatibility matrix). The plugin also allows only
+  one active writer per workspace, so a new turn may be reported as busy
+  while another is still finishing.
 
 ## Troubleshooting
 
