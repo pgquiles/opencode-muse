@@ -1,6 +1,7 @@
 import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/provider";
 import { fingerprintTranscript } from "../session/fingerprint.js";
 import type { TranscribeAudio } from "../msp/transcribe.js";
+import type { StagePdfAttachment } from "../msp/pdf.js";
 
 export interface ContextFragment {
   label: string;
@@ -28,6 +29,7 @@ export type PromptInputErrorCode =
   | "transcription-failed"
   | "transcription-timeout"
   | "no-speech-heard"
+  | "pdf-stage-failed"
   | "aborted"
   | "unsupported-response-format"
   | "required-opencode-tool"
@@ -50,6 +52,8 @@ export interface ExtractTurnInputOptions {
   signal?: AbortSignal;
   /** Absent: audio falls back to `unsupported-media` (pre-#32 behavior). */
   transcribeAudio?: TranscribeAudio;
+  /** Absent: PDF falls back to `unsupported-media` (pre-#33 behavior). */
+  stagePdfAttachment?: StagePdfAttachment;
 }
 
 export interface ModelOptionsInput {
@@ -124,10 +128,22 @@ async function extractFilePart(
   part: LanguageModelV3FilePart,
   limits: { maxMediaBytes: number; maxInlineImageBytes: number },
   transcribeAudio?: TranscribeAudio,
+  stagePdfAttachment?: StagePdfAttachment,
 ): Promise<ExtractedTurnPart | PromptInputError> {
   const mediaType = part.mediaType.toLowerCase();
   if (mediaType === "application/pdf") {
-    return inputError("unsupported-media", { mediaType: safeMediaType(mediaType) });
+    if (!stagePdfAttachment) return inputError("unsupported-media", { mediaType: safeMediaType(mediaType) });
+    const decoded = fileBytes(part);
+    if ("type" in decoded) return decoded;
+    if (decoded.bytes.byteLength > limits.maxMediaBytes) {
+      return inputError("media-too-large", { mediaType: safeMediaType(decoded.mediaType) });
+    }
+    const staged = await stagePdfAttachment(decoded.bytes);
+    if (!staged.ok) return inputError(staged.code, { mediaType: safeMediaType(decoded.mediaType) });
+    return {
+      type: "text",
+      text: `[Attached PDF saved to ${staged.path} (${decoded.bytes.byteLength} bytes): read it with your tools if needed]`,
+    };
   }
   if (mediaType.startsWith("audio/")) {
     if (!transcribeAudio) return inputError("unsupported-media", { mediaType: safeMediaType(mediaType) });
@@ -220,7 +236,7 @@ export async function extractTurnInput(
       if (part.type === "text") {
         parts.push({ type: "text", text: part.text });
       } else if (part.type === "file") {
-        const mapped = await extractFilePart(part, limits, options.transcribeAudio);
+        const mapped = await extractFilePart(part, limits, options.transcribeAudio, options.stagePdfAttachment);
         if ("code" in mapped) return { ok: false, error: mapped };
         parts.push(mapped);
       }

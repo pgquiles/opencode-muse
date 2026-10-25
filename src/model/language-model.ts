@@ -22,6 +22,7 @@ import { MuseStreamMapper, type FlatMuseUsage } from "./stream.js";
 import type { MuseModelSelection, RequestContext } from "../types.js";
 import type { UserInputQuestion as UserInputQuestionShape } from "../msp/user-input.js";
 import type { TranscribeAudio } from "../msp/transcribe.js";
+import type { StagePdfOutcome } from "../msp/pdf.js";
 
 export interface MuseTurnHost {
   mintCommandId(): string;
@@ -79,6 +80,11 @@ export interface MuseLanguageRuntime {
   describeCurrentUserInputQuestion?(sessionID: string): { question: UserInputQuestionShape; toolName?: string } | undefined;
   /** Audio attachment transcription (#32); absent preserves the unsupported-media rejection. */
   transcribeAudioClip?: TranscribeAudio;
+  /**
+   * PDF workspace staging (#33): bound to the requesting workspace
+   * directory. Absent preserves the unsupported-media rejection.
+   */
+  stagePdfAttachment?: (directory: string, bytes: Uint8Array) => Promise<StagePdfOutcome>;
 }
 
 export interface MuseTurnExecution {
@@ -553,9 +559,13 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     if (context.kind !== "primary") throw new MuseUnsupportedRequestError(context.kind);
     const supportedOptions = validateModelOptions(options);
     if (!supportedOptions.ok) throw inputErrorToException(supportedOptions.error);
+    const stagePdf = runtime.stagePdfAttachment
+      ? (bytes: Uint8Array) => runtime.stagePdfAttachment!(context.directory, bytes)
+      : undefined;
     const initialExtraction = await extractTurnInput(options.prompt, [], [], {
       signal: options.abortSignal,
       transcribeAudio: runtime.transcribeAudioClip,
+      stagePdfAttachment: stagePdf,
     });
     if (!initialExtraction.ok) throw inputErrorToException(initialExtraction.error);
     const approvalResponses = extractApprovalResponses(options.prompt);
@@ -593,7 +603,7 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
       options.prompt,
       observedCompaction ? [] : session.previousTranscriptFingerprints,
       session.contextAllowlist,
-      { signal: options.abortSignal, transcribeAudio: runtime.transcribeAudioClip },
+      { signal: options.abortSignal, transcribeAudio: runtime.transcribeAudioClip, stagePdfAttachment: stagePdf },
     );
     if (!extracted.ok) {
       if (joining && extracted.error.code === "no-new-user-input") {

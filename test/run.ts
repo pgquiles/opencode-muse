@@ -17,6 +17,7 @@ import "./unit/request-context.test.ts";
 import "./unit/agent-context.test.ts";
 import "./unit/prompt.test.ts";
 import "./unit/audio-transcribe.test.ts";
+import "./unit/pdf-staging.test.ts";
 import "./unit/stream-mapping.test.ts";
 import "./unit/language-model.test.ts";
 import "./unit/session-manager.test.ts";

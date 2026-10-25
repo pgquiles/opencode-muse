@@ -107,6 +107,11 @@ the billed lane with `muse usage`. See
   A clip that cannot be transcribed fails the turn loudly instead of being
   silently dropped. See
   [#32](https://github.com/pgquiles/opencode-muse/issues/32).
+- Attach PDF files to a Muse turn: the plugin stages the bytes under the
+  session workspace (generated name, never a user-supplied path) and tells
+  the model where to read them, so the agent parses them with its own
+  tools. The staging directory is purged when the provider unloads. See
+  [#33](https://github.com/pgquiles/opencode-muse/issues/33).
 - Pick a reasoning effort per model through OpenCode's own controls: an
   untouched model runs its catalog default (which rotates over time), Ctrl+T
   cycles the concrete variants (`minimal` … `max`, model-dependent, one way
@@ -144,8 +149,9 @@ the billed lane with `muse usage`. See
   reason until native structured input lands (tracked in
   [#6](https://github.com/pgquiles/opencode-muse/issues/6)).
 - **Files and response formats:** The bridge accepts text, PNG/JPEG/GIF/WebP
-  images, MP4/MOV video, and audio clips (transcribed to labeled text, see
-  Features). PDF attachments are not supported.
+  images, MP4/MOV video, audio clips (transcribed to labeled text), and
+  PDF files (staged into the workspace for the agent to read) — see
+  Features.
   Strict JSON output and some OpenCode generation settings (such as
   temperature and token limits) are not supported; requests that require a
   specific OpenCode tool are rejected. Muse's separate CLI transcription and

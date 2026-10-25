@@ -8,6 +8,7 @@ import {
 import { addRequestContextHeaders } from "./model/context.js";
 import { createMuseLanguageModel } from "./model/language-model.js";
 import { createCliTranscriber } from "./msp/transcribe.js";
+import { createPdfStager, purgePdfStaging, type StagePdfOutcome } from "./msp/pdf.js";
 import { MuseSessionManager } from "./session/manager.js";
 import { SessionRegistry } from "./session/registry.js";
 import { WorkspaceLock } from "./session/workspace-lock.js";
@@ -140,6 +141,11 @@ export async function createProviderPlugin(
       input.language = createMuseLanguageModel({
         selectionIndex: catalog.selectionIndex,
         transcribeAudioClip: createCliTranscriber({ museBin }),
+        stagePdfAttachment: async (directory: string, bytes: Uint8Array): Promise<StagePdfOutcome> => {
+          const staged = await createPdfStager(directory)(bytes);
+          if (staged.ok) pdfStagingDirs.add(directory);
+          return staged;
+        },
         resolveSession: (context) => sessions.resolveSession(context),
         settleApprovalResponses: (sessionID, responses) => sessions.settleApprovalResponses(sessionID, responses),
         hasParkedApprovals: (sessionID) => sessions.hasParkedApprovals(sessionID),
@@ -173,6 +179,9 @@ export async function createProviderPlugin(
   }
 
   let disposed = false;
+  // PDF staging retention (#33): every workspace that received a staged
+  // PDF is purged on dispose. Crash orphans are documented manual cleanup.
+  const pdfStagingDirs = new Set<string>();
   const refreshTask = new Promise<void>((resolve) => setTimeout(resolve, 0)).then(() => {
     if (disposed) return false;
     return catalog.refresh(
@@ -217,6 +226,7 @@ export async function createProviderPlugin(
         languageHookRegistration?.dispose(),
         ...localMetaRegistrations.map((hook) => hook.dispose()),
         sessions.close(),
+        ...[...pdfStagingDirs].map((directory) => purgePdfStaging(directory)),
       ]);
     },
   };
