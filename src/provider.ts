@@ -14,15 +14,37 @@ import { MuseBridgeError } from "./errors.js";
 import { makeCompactionDigest, makeLocalTitle } from "./model/meta.js";
 import { fingerprintCompactionOutput } from "./session/fingerprint.js";
 import { extractAllowedAgentContext } from "./model/agent-context.js";
+import {
+  CONTRIBUTOR_MODE_ENV,
+  CONTRIBUTOR_MODE_OPTION,
+  assertContributorFlagSupported,
+  baseServeArgs,
+  paygBillingNotice,
+  resolveContributorMode,
+  type ContributorMode,
+  type ServeHelpRunner,
+} from "./msp/contributor.js";
 type ProviderEditor = Parameters<Parameters<Plugin.Context["provider"]["transform"]>[0]>[0];
 
-export type MuseProviderContext = Pick<Plugin.Context, "provider" | "session" | "aisdk"> & {
+export type MuseProviderContext = Pick<Plugin.Context, "provider" | "session" | "aisdk" | "options"> & {
   location: Pick<Plugin.Context["location"], "directory">;
 };
 
+export interface SessionManagerBase {
+  stateDirectory: string;
+  registry: SessionRegistry;
+  workspaceLock: WorkspaceLock;
+  museBin?: string;
+  contributorMode: ContributorMode;
+}
+
 export interface ProviderPluginDependencies {
   fetchCatalog?: (directory: string) => Promise<MuseCatalogSnapshot>;
-  createSessionManager?: () => MuseSessionManager;
+  createSessionManager?: (base: SessionManagerBase) => MuseSessionManager;
+  /** Binary under test; defaults to the host default ("muse"). */
+  museBin?: string;
+  /** Overrides the `serve --help` probe; the default runs the real CLI. */
+  serveHelpRunner?: ServeHelpRunner;
   /** Bounds how long setup waits for the live catalog before falling back. Defaults to 15s. */
   setupRefreshTimeoutMs?: number;
 }
@@ -47,9 +69,11 @@ function providerInfo(moduleUrl: string): Provider.Info {
   } as unknown as Provider.Info;
 }
 
-async function fetchMuseCatalog(directory: string): Promise<MuseCatalogSnapshot> {
+async function fetchMuseCatalog(directory: string, contributorMode: ContributorMode): Promise<MuseCatalogSnapshot> {
+  // model/list bills nothing; the lane flag rides along so every serve child
+  // the plugin starts agrees on the requested lane.
   const host = await MspHost.start({
-    args: ["serve", "--provider", "meta", "--disable-shell", "--disable-write"],
+    args: [...baseServeArgs("meta", contributorMode), "--disable-shell", "--disable-write"],
     cwd: directory,
     startupTimeoutMs: 10_000,
     requestTimeoutMs: 10_000,
@@ -68,13 +92,31 @@ export async function createProviderPlugin(
   moduleUrl: string,
   dependencies: ProviderPluginDependencies = {},
 ): Promise<MuseProviderRuntime> {
+  // Billing lane (#29): an explicit plugin option wins, then the namespaced
+  // env var, otherwise the documented default (on, like the Muse TUI).
+  // Anything else fails closed before any serve child starts.
+  const contributorMode = resolveContributorMode(
+    ctx.options?.[CONTRIBUTOR_MODE_OPTION] ?? process.env[CONTRIBUTOR_MODE_ENV],
+  );
+  const museBin = dependencies.museBin;
+  await assertContributorFlagSupported(museBin ?? "muse", dependencies.serveHelpRunner);
+  const paygNotice = paygBillingNotice();
+  if (paygNotice) console.warn(`opencode-muse: ${paygNotice}`);
+  // The lane below is requested from our own spawn args, never confirmed by
+  // the server (Meta exposes no lane signal); `muse usage` is the evidence.
+  console.warn(
+    `opencode-muse: serve hosts request the ${contributorMode === "on" ? "Contributor" : "Standard"} billing lane (--contributor-mode ${contributorMode}).`,
+  );
   const catalog = new CatalogCache();
   const stateDirectory = SessionRegistry.resolveStateDirectory();
-  const sessions = dependencies.createSessionManager?.() ?? new MuseSessionManager({
-      stateDirectory,
-      registry: new SessionRegistry({ stateDirectory }),
-      workspaceLock: new WorkspaceLock({ stateDirectory }),
-    });
+  const managerBase: SessionManagerBase = {
+    stateDirectory,
+    registry: new SessionRegistry({ stateDirectory }),
+    workspaceLock: new WorkspaceLock({ stateDirectory }),
+    museBin,
+    contributorMode,
+  };
+  const sessions = dependencies.createSessionManager?.(managerBase) ?? new MuseSessionManager(managerBase);
   const registration = await ctx.provider.transform((providers: ProviderEditor) => {
     providers.add({ info: providerInfo(moduleUrl), models: catalog.models });
   });
@@ -127,7 +169,9 @@ export async function createProviderPlugin(
   const refreshTask = new Promise<void>((resolve) => setTimeout(resolve, 0)).then(() => {
     if (disposed) return false;
     return catalog.refresh(
-      () => (dependencies.fetchCatalog ?? fetchMuseCatalog)(ctx.location.directory),
+      () => (dependencies.fetchCatalog ?? ((directory: string) => fetchMuseCatalog(directory, contributorMode)))(
+        ctx.location.directory,
+      ),
       async () => {
         if (!disposed) await ctx.provider.reload();
       },

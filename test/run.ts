@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { readRepositoryJson, repositoryPath } from "./helpers.ts";
+import "./unit/contributor.test.ts";
 import "./unit/msp-client.test.ts";
 import "./unit/msp-approval-exchange.test.ts";
 import "./unit/msp-approvals.test.ts";

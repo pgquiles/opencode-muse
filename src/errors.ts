@@ -17,7 +17,8 @@ export type MuseBridgeErrorCode =
   | "MUSE_UNSUPPORTED_INPUT"
   | "MUSE_RECOVERY_CHOICE_REQUIRED"
   | "MUSE_TRANSCRIPT_DIVERGED"
-  | "MUSE_APPROVAL_PENDING";
+  | "MUSE_APPROVAL_PENDING"
+  | "MUSE_INVALID_CONFIG";
 
 /** Safe plugin error: never attach raw CLI stderr, MSP text, prompts, or payloads. */
 export class MuseBridgeError extends Error {
@@ -105,6 +106,13 @@ export class MspSchemaMismatchError extends MuseBridgeError {
   constructor(readonly pinned: string, readonly served: string) {
     super("MUSE_HOST_START_FAILED", "Muse host schema fingerprint does not match the pinned MSP schema", false);
     this.name = "MspSchemaMismatchError";
+  }
+}
+
+export class MuseInvalidConfigError extends MuseBridgeError {
+  constructor(message: string) {
+    super("MUSE_INVALID_CONFIG", message, false);
+    this.name = "MuseInvalidConfigError";
   }
 }
 

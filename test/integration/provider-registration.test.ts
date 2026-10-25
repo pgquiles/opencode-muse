@@ -3,6 +3,12 @@ import { createProviderPlugin } from "../../src/provider.js";
 import { createMuse } from "../../src/index.js";
 import type { MuseCatalogSnapshot } from "../../src/catalog.js";
 import { fingerprintCompactionOutput } from "../../src/session/fingerprint.js";
+import type { ServeHelpRunner } from "../../src/msp/contributor.js";
+import type { SessionManagerBase } from "../../src/provider.js";
+import { MuseInvalidConfigError } from "../../src/errors.js";
+
+/** The tests never touch the real CLI: the flag probe always succeeds. */
+const okServeHelp: ServeHelpRunner = async () => ({ stdout: "--contributor-mode <on|off>" });
 
 function liveCatalog(): MuseCatalogSnapshot {
   return {
@@ -27,7 +33,7 @@ function liveCatalog(): MuseCatalogSnapshot {
   };
 }
 
-function fakeContext() {
+function fakeContext(pluginOptions?: Record<string, unknown>) {
   let transform: ((editor: { add(input: { info: Record<string, unknown>; models: readonly Record<string, unknown>[] }): void }) => void) | undefined;
   const registrations: Array<{ info: Record<string, unknown>; models: readonly Record<string, unknown>[] }> = [];
   const sessionHooks: Array<{ name: string; callback: (input: any) => void; options?: unknown }> = [];
@@ -35,6 +41,7 @@ function fakeContext() {
   let reloads = 0;
   return {
     context: {
+      options: pluginOptions,
       location: { directory: "/tmp/opencode/muse-plugin-test" },
       session: {
         async hook(name: string, callback: (input: any) => void, options?: unknown) {
@@ -72,6 +79,7 @@ describe("Muse OpenCode provider registration", () => {
     const fake = fakeContext();
     const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
       fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: okServeHelp,
     });
     await runtime.refreshTask;
 
@@ -91,6 +99,7 @@ describe("Muse OpenCode provider registration", () => {
     const fake = fakeContext();
     const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
       fetchCatalog: async () => { throw new Error("discovery failure"); },
+      serveHelpRunner: okServeHelp,
     });
     await runtime.refreshTask;
 
@@ -104,6 +113,7 @@ describe("Muse OpenCode provider registration", () => {
     const fake = fakeContext();
     const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
       fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: okServeHelp,
     });
     await runtime.refreshTask;
     const hook = fake.sessionHooks.find((candidate) => candidate.name === "model.request");
@@ -131,6 +141,7 @@ describe("Muse OpenCode provider registration", () => {
     const fake = fakeContext();
     const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
       fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: okServeHelp,
     });
     await runtime.refreshTask;
     const hook = fake.aisdkHooks.find((candidate) => candidate.name === "language");
@@ -152,6 +163,7 @@ describe("Muse OpenCode provider registration", () => {
     let fakeManagerClosed = false;
     const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
       fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: okServeHelp,
       createSessionManager: () => ({
         setContextForSession() {},
         async resolveSession() { throw new Error("local meta request must not resolve Muse session"); },
@@ -200,6 +212,7 @@ describe("Muse OpenCode provider registration", () => {
     const observed: Array<{ sessionID: string; result: unknown }> = [];
     const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
       fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: okServeHelp,
       createSessionManager: () => ({
         setContextForSession(sessionID: string, result: unknown) { observed.push({ sessionID, result }); },
         async resolveSession() { throw new Error("the context hook alone must not start a turn"); },
@@ -243,6 +256,7 @@ describe("Muse OpenCode provider registration", () => {
     const fake = fakeContext();
     const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
       fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: okServeHelp,
     });
 
     expect(runtime.catalog.hasLiveCatalog).toBe(true);
@@ -251,11 +265,100 @@ describe("Muse OpenCode provider registration", () => {
     await runtime.dispose();
   });
 
+  test("provider.requestsContributorLaneByDefaultAndHandsItToTheManager", async () => {
+    const fake = fakeContext();
+    const seen: SessionManagerBase[] = [];
+    const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
+      fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: okServeHelp,
+      createSessionManager: (base) => {
+        seen.push(base);
+        return { async close() {} } as never;
+      },
+    });
+    await runtime.refreshTask;
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ contributorMode: "on" });
+    await runtime.dispose();
+  });
+
+  test("provider.honorsAnExplicitStandardOptOut", async () => {
+    const fake = fakeContext({ contributorMode: false });
+    const seen: SessionManagerBase[] = [];
+    const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
+      fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: okServeHelp,
+      createSessionManager: (base) => {
+        seen.push(base);
+        return { async close() {} } as never;
+      },
+    });
+    await runtime.refreshTask;
+
+    expect(seen[0]).toMatchObject({ contributorMode: "off" });
+    await runtime.dispose();
+  });
+
+  test("provider.rejectsAnInvalidContributorModeBeforeAnyHostStarts", async () => {
+    const fake = fakeContext({ contributorMode: "sometimes" });
+    const error = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
+      fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: okServeHelp,
+    }).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(MuseInvalidConfigError);
+    expect((error as MuseInvalidConfigError).code).toBe("MUSE_INVALID_CONFIG");
+  });
+
+  test("provider.failsClosedWhenTheCliLacksTheContributorFlag", async () => {
+    const fake = fakeContext();
+    const error = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
+      fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: async () => ({ stdout: "--provider <name>" }),
+    }).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(MuseInvalidConfigError);
+  });
+
+  test("provider.warnsAboutPaygWithoutReadingTheKey", async () => {
+    const previous = process.env.META_API_KEY;
+    process.env.META_API_KEY = "presence-sentinel-not-a-key";
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      const fake = fakeContext();
+      const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
+        fetchCatalog: async () => liveCatalog(),
+        serveHelpRunner: okServeHelp,
+      });
+      await runtime.refreshTask;
+      await runtime.dispose();
+    } finally {
+      console.warn = originalWarn;
+      if (previous === undefined) delete process.env.META_API_KEY;
+      else process.env.META_API_KEY = previous;
+    }
+
+    expect(warnings.some((warning) => warning.includes("metamate"))).toBe(true);
+    expect(warnings.some((warning) => warning.includes("presence-sentinel-not-a-key"))).toBe(false);
+  });
+
   test("provider.setupReturnsAfterABoundedWaitWhenDiscoveryStalls", async () => {
     const fake = fakeContext();
     let finishFetch!: (value: MuseCatalogSnapshot) => void;
     const setup = createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
       fetchCatalog: () => new Promise((resolve) => { finishFetch = resolve; }),
+      serveHelpRunner: okServeHelp,
       setupRefreshTimeoutMs: 30,
     });
     const started = Date.now();

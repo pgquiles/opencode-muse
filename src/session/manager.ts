@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import type { MspHandshake } from "@muse-code/sdk";
 import type { RequestContext } from "../types.js";
 import { MspHost } from "../msp/host.js";
+import { baseServeArgs, type ContributorMode } from "../msp/contributor.js";
 import type { ApprovalExchange } from "../msp/approvals.js";
 import type { ApprovalResponse } from "../model/prompt.js";
 import {
@@ -28,6 +29,8 @@ export interface MuseSessionManagerOptions {
   registry: SessionRegistry;
   workspaceLock: WorkspaceLock;
   museBin?: string;
+  /** Requested billing lane; defaults to "on" (matches the Muse TUI). */
+  contributorMode?: ContributorMode;
   createHost?(options: { museBin?: string; cwd: string; args: readonly string[]; capabilities?: Parameters<MspHandshake["initialize"]>[0]["capabilities"] }): Promise<MuseSessionHost>;
   videoChunkBytes?: number;
 }
@@ -86,10 +89,12 @@ function selectionMatches(
 export class MuseSessionManager {
   private readonly bindings = new Map<string, ManagedBinding>();
   private readonly contextBySession = new Map<string, AgentContextResult>();
+  private readonly contributorMode: ContributorMode;
   private readonly createHost: NonNullable<MuseSessionManagerOptions["createHost"]>;
   private closed = false;
 
   constructor(private readonly options: MuseSessionManagerOptions) {
+    this.contributorMode = options.contributorMode ?? "on";
     this.createHost = options.createHost ?? (async ({ museBin, cwd, args, capabilities }) => MspHost.start({
       museBin,
       cwd,
@@ -158,7 +163,7 @@ export class MuseSessionManager {
       host = await this.createHost({
         museBin: this.options.museBin,
         cwd: canonicalDirectory,
-        args: ["serve", "--provider", stored?.providerId ?? selected.providerId],
+        args: baseServeArgs(stored?.providerId ?? selected.providerId, this.contributorMode),
         capabilities: { userInputDialogs: false },
       });
       const durability = host.initializeResult.sessionDurability;

@@ -61,6 +61,32 @@ never reads Muse credential files, exports tokens, or changes subscription
 mode. If the CLI has no usable model catalog, the provider remains a disabled
 setup placeholder rather than advertising a model that will fail on use.
 
+## Configuration
+
+The billing lane is a plain process environment variable read once when the
+plugin loads (it is not an `opencode.json` field — probed on OpenCode 2.1.4,
+plugin options arrive empty):
+
+| Value | Meaning |
+|---|---|
+| unset (default) | Request the Contributor lane, like the Muse TUI |
+| `on` | Same as the default, explicit |
+| `off` | Request the Standard lane |
+
+```sh
+# One session on the Standard lane:
+OPENCODE_MUSE_CONTRIBUTOR_MODE=off opencode
+
+# Persist it by exporting the variable in your shell profile
+# (e.g. ~/.bashrc, ~/.zshrc) before launching OpenCode/OpenChamber.
+```
+
+Restart OpenCode/OpenChamber after changing it; the lane is fixed when the
+plugin loads. Anything else fails setup with a clear error instead of
+billing the wrong lane. Confirm the requested lane in the startup log and
+the billed lane with `muse usage`. See
+[#29](https://github.com/pgquiles/opencode-muse/issues/29).
+
 ## Features
 
 - Use Muse Code models from OpenCode or OpenChamber after adding the package to
@@ -112,10 +138,16 @@ setup placeholder rather than advertising a model that will fail on use.
   warning instead of failing closed; a missing/malformed fingerprint or an
   unsupported envelope version still fails closed. See
   [#21](https://github.com/pgquiles/opencode-muse/issues/21).
-- **Billing and simultaneous work:** Pay-as-you-go catalog and text turns pass
-  on Muse 1.4.13 (see the compatibility matrix). The plugin also allows only
-  one active writer per workspace, so a new turn may be reported as busy
-  while another is still finishing.
+- **Billing:** opencode-muse is subscription-only; for pay-as-you-go use
+  OpenCode's official OpenAI-compatible provider (`metamate`). Every serve
+  host requests the Contributor lane unless opted out; only `muse usage`
+  confirms the billed lane, and unknown Contributor settings fail closed
+  instead of guessing. Contributor catalog rows bill the requested lane
+  like every other row. See [Configuration](#configuration) and
+  [#29](https://github.com/pgquiles/opencode-muse/issues/29).
+- **Simultaneous work:** The plugin allows only one active writer per
+  workspace, so a new turn may be reported as busy while another is still
+  finishing.
 
 ## Troubleshooting
 

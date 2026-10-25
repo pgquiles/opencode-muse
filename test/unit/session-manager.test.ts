@@ -8,6 +8,7 @@ import { WorkspaceLock } from "../../src/session/workspace-lock.js";
 import { MuseSessionManager } from "../../src/session/manager.js";
 import { MspCommandTimeoutError, MuseApprovalPendingError, WorkspaceBusyError, MuseRecoveryChoiceRequiredError } from "../../src/errors.js";
 import { ApprovalExchange } from "../../src/msp/approvals.js";
+import type { ContributorMode } from "../../src/msp/contributor.js";
 import type { RequestContext } from "../../src/types.js";
 
 const roots: string[] = [];
@@ -50,6 +51,7 @@ function managerAt(
   registryOverride?: SessionRegistry,
   workspaceLockOverride?: WorkspaceLock,
   closeGate?: { started(): void; wait: Promise<void> },
+  contributorMode?: ContributorMode,
 ) {
   let id = 0;
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -61,6 +63,7 @@ function managerAt(
     stateDirectory: root,
     registry,
     workspaceLock: workspaceLockOverride ?? new WorkspaceLock({ stateDirectory: root }),
+    contributorMode,
     async createHost(options) {
       hostOptions.push(options as unknown as Record<string, unknown>);
       const record = { closeCount: 0 };
@@ -131,6 +134,20 @@ describe("MuseSessionManager", () => {
     expect(second.previousTranscriptFingerprints).toEqual(["d".repeat(64)]);
     await second.release?.();
     await manager.close();
+  });
+
+  test("sessionManager.spawnsServeWithTheRequestedBillingLane", async () => {
+    for (const [mode, flag] of [[undefined, "on"], ["off", "off"]] as const) {
+      const root = tempRoot();
+      const { manager, hostOptions } = managerAt(root, false, false, undefined, undefined, undefined, mode);
+      const directory = join(root, "project");
+      mkdirSync(directory);
+      const binding = await manager.resolveSession(context("ses_oc_1", directory));
+      await binding.release?.();
+
+      expect(hostOptions[0]?.args).toEqual(["serve", "--provider", "meta", "--contributor-mode", flag]);
+      await manager.close();
+    }
   });
 
   test("sessionManager.rejectsSecondOpenCodeWriterForSameWorkspace", async () => {
