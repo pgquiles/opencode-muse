@@ -163,8 +163,10 @@ the billed lane with `muse usage`. See
   Features.
   Strict JSON output and some OpenCode generation settings (such as
   temperature and token limits) are not supported; requests that require a
-  specific OpenCode tool are rejected. Muse's separate CLI transcription and
-  JSON-output commands are not exposed as OpenCode features.
+  specific OpenCode tool are rejected. Muse's separate CLI JSON-output
+  commands (`muse exec --json`, transcript `muse export`) are not exposed
+  as OpenCode features; `muse exec --output-schema` answer-shaping stays
+  unwired because it would fork the turn pipeline (see #35).
 - **Tools and agent instructions:** Muse runs its own agent and tools; OpenCode
   tools are not executed for a Muse turn. Recognized custom-agent instructions
   may be forwarded, but Muse otherwise follows its own workspace rules.
