@@ -49,6 +49,7 @@ export interface ApprovalRequestParams {
 
 export type ApprovalVerdict =
   | { approved: boolean; params: ApprovalRequestParams }
+  | { choiceId: string; params: ApprovalRequestParams }
   | { approved: false; timedOut: true; params: ApprovalRequestParams }
   | { alreadyDecided: true; params: ApprovalRequestParams };
 
@@ -82,6 +83,88 @@ interface PendingApproval {
   approvalId: string;
   stages: Map<string, PendingStage>;
   timer: ReturnType<typeof setTimeout> | undefined;
+  /** Conversational verdict attempts consumed; re-ask once, then deny. */
+  verdictAttempts?: number;
+}
+
+/** A validated offer from `availableChoices`, in presented order. */
+export interface ConversationalChoice {
+  choiceId: string;
+  label: string;
+  scope: string;
+}
+
+/** Keep only choices with a usable verbatim label, in presented order. */
+export function conversationalChoices(availableChoices: readonly unknown[]): ConversationalChoice[] {
+  const choices: ConversationalChoice[] = [];
+  for (const entry of availableChoices) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const candidate = entry as Record<string, unknown>;
+    if (typeof candidate.choiceId !== "string") continue;
+    if (typeof candidate.label !== "string" || candidate.label.trim() === "") continue;
+    if (typeof candidate.scope !== "string") continue;
+    choices.push({ choiceId: candidate.choiceId, label: candidate.label, scope: candidate.scope });
+  }
+  return choices;
+}
+
+const CHOICE_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function normalizeChoiceText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Match free text to exactly one presented choice by letter, number, label,
+ * or letter+label (case/punctuation/whitespace-insensitive). Anything else —
+ * unknown forms, ties across choices, meaning-based pleas — returns null so
+ * the caller re-asks once, then denies. Ambiguity never resolves to approve.
+ */
+export function matchConversationalChoice(
+  choices: readonly ConversationalChoice[],
+  input: string,
+): ConversationalChoice | null {
+  const wanted = normalizeChoiceText(input);
+  if (wanted === "") return null;
+  let matched: ConversationalChoice | null = null;
+  for (let index = 0; index < choices.length; index += 1) {
+    const choice = choices[index]!;
+    const forms = new Set([
+      normalizeChoiceText(CHOICE_LETTERS[index] ?? ""),
+      normalizeChoiceText(choice.label),
+      normalizeChoiceText(`${CHOICE_LETTERS[index] ?? ""}${choice.label}`),
+      String(index + 1),
+    ]);
+    forms.delete("");
+    if (!forms.has(wanted)) continue;
+    if (matched !== null) return null;
+    matched = choice;
+  }
+  return matched;
+}
+
+/**
+ * Render the choices verbatim as a lettered list with the reply contract.
+ * Labeled as bridge text: the Muse transcript never sees this (the bridge
+ * only forwards new user input), and the OpenCode side must not mistake it
+ * for model output.
+ */
+export function renderConversationalApprovalPrompt(input: {
+  toolName?: string;
+  choices: readonly ConversationalChoice[];
+  attempt: number;
+  received?: string;
+}): string {
+  const action = input.toolName ? `Muse wants to run \`${input.toolName}\`.` : "Muse wants to perform an action.";
+  const lines = input.choices.map((choice, index) =>
+    `${CHOICE_LETTERS[index] ?? "?"}. ${choice.label} (${choice.scope})`);
+  const contract = "Reply with one option (letter, number, or name). Anything else is asked once more, then denied.";
+  const header = `**Approval needed** (opencode-muse bridge message, not the model): ${action}`;
+  if (input.attempt > 0 && input.received !== undefined) {
+    const quoted = input.received.length > 200 ? `${input.received.slice(0, 200)}…` : input.received;
+    return `${header}\nI didn't understand "${quoted}" — reply with one of:\n${lines.join("\n")}\n${contract}`;
+  }
+  return `${header}\n${lines.join("\n")}\n${contract}`;
 }
 
 /**
@@ -145,6 +228,61 @@ export class ApprovalExchange {
       stage.resolve({ approved, params: stage.params });
     }
     return true;
+  }
+
+  /**
+   * Settle with the exact choice the user picked conversationally. The host
+   * validates the id against the offered choices before deciding.
+   */
+  settleChoice(approvalId: string, choiceId: string): boolean {
+    const pending = this.pending.get(approvalId);
+    if (!pending) return false;
+    this.clear(approvalId);
+    for (const stage of pending.stages.values()) {
+      stage.resolve({ choiceId, params: stage.params });
+    }
+    return true;
+  }
+
+  /**
+   * Consume one conversational verdict attempt for a pending approval.
+   * Returns the zero-based attempt index, or -1 when nothing pends.
+   */
+  noteVerdictAttempt(approvalId: string): number {
+    const pending = this.pending.get(approvalId);
+    if (!pending) return -1;
+    const attempts = pending.verdictAttempts ?? 0;
+    pending.verdictAttempts = attempts + 1;
+    return attempts;
+  }
+
+  /** Pending approvals in arrival order with their latest offered choices. */
+  describePending(): Array<{
+    approvalId: string;
+    requirementId: string;
+    choices: ConversationalChoice[];
+    toolName?: string;
+    turnId: string;
+  }> {
+    const described: Array<{
+      approvalId: string;
+      requirementId: string;
+      choices: ConversationalChoice[];
+      toolName?: string;
+      turnId: string;
+    }> = [];
+    for (const pending of this.pending.values()) {
+      const requirementIds = [...pending.stages.keys()];
+      const latest = pending.stages.get(requirementIds[requirementIds.length - 1]!)!;
+      described.push({
+        approvalId: pending.approvalId,
+        requirementId: latest.params.currentRequirementId,
+        choices: conversationalChoices(latest.params.availableChoices),
+        ...(typeof latest.params.toolName === "string" ? { toolName: latest.params.toolName } : {}),
+        turnId: latest.params.turnId,
+      });
+    }
+    return described;
   }
 
   markDecided(approvalId: string, requirementId: string): void {

@@ -5,6 +5,11 @@ import type { MspHandshake } from "@muse-code/sdk";
 import type { RequestContext } from "../types.js";
 import { MspHost } from "../msp/host.js";
 import { baseServeArgs, type ContributorMode } from "../msp/contributor.js";
+import {
+  matchConversationalChoice,
+  renderConversationalApprovalPrompt,
+  type ConversationalChoice,
+} from "../msp/approvals.js";
 import type { ApprovalExchange } from "../msp/approvals.js";
 import type { ApprovalResponse } from "../model/prompt.js";
 import {
@@ -312,11 +317,12 @@ export class MuseSessionManager {
   }
 
   /**
-   * Route OpenCode's answers to previously emitted `tool-approval-request`
-   * chunks into the parked MSP approval round trips. Returns the approval
-   * ids that matched a still-parked approval. When a matched approval
-   * belongs to the binding's active turn, the next `resolveSession` call
-   * attaches to that turn instead of starting a new one.
+   * Route approval answers into the parked MSP approval round trips — both
+   * the legacy structured funnel and conversational verdicts carrying an
+   * exact offered choice (validated again on `approval/decide`). Returns the
+   * approval ids that matched a still-parked approval. When a matched
+   * approval belongs to the binding's active turn, the next `resolveSession`
+   * call attaches to that turn instead of starting a new one.
    */
   async settleApprovalResponses(openCodeSessionId: string, responses: ApprovalResponse[]): Promise<string[]> {
     const binding = this.bindings.get(openCodeSessionId);
@@ -327,7 +333,10 @@ export class MuseSessionManager {
       // Capture the parked turn before settle clears the pending entry.
       const parkedTurnId = binding.host.approvals.pendingApprovalTurnId(response.approvalId);
       if (parkedTurnId === undefined) continue;
-      if (!binding.host.approvals.settle(response.approvalId, response.approved)) continue;
+      const settled = response.choiceId !== undefined
+        ? binding.host.approvals.settleChoice(response.approvalId, response.choiceId)
+        : binding.host.approvals.settle(response.approvalId, response.approved);
+      if (!settled) continue;
       matched.push(response.approvalId);
       // Arm the join only for verdicts that belong to the still-active turn;
       // a verdict for a dead turn is delivered but never joined.
@@ -339,6 +348,94 @@ export class MuseSessionManager {
       binding.handoffLeaseToJoiner = true;
     }
     return matched;
+  }
+
+  /**
+   * Interpret a user message as a verdict for the oldest pending approval.
+   * Returns null when nothing pends (normal turn flow). Otherwise the text
+   * carries the outcome: a recorded echo, a re-ask, or a denial. `settledLast`
+   * is true only when no approvals remain, in which case the caller joins the
+   * parked turn; anything else ends synthetically, and the next message
+   * decides the next queued approval. Ambiguity is re-asked once, then
+   * denied via the narrowest reject choice — never approved.
+   */
+  async consumeConversationalVerdict(
+    openCodeSessionId: string,
+    text: string,
+  ): Promise<{ text: string; settledLast: boolean } | null> {
+    const binding = this.bindings.get(openCodeSessionId);
+    if (!binding) return null;
+    const pending = binding.host.approvals.describePending();
+    if (pending.length === 0) return null;
+    const oldest = pending[0]!;
+    if (oldest.choices.length === 0) {
+      // Nothing presentable: fail closed exactly like the stream notice.
+      await this.settleApprovalResponses(openCodeSessionId, [{ approvalId: oldest.approvalId, approved: false }]);
+      return this.verdictOutcome(
+        binding,
+        `Denied ${oldest.toolName ? `\`${oldest.toolName}\`` : "the request"} — Muse offered no usable options. Re-prompt to try again.`,
+      );
+    }
+    const matched = matchConversationalChoice(oldest.choices, text);
+    if (matched) {
+      await this.settleApprovalResponses(openCodeSessionId, [{
+        approvalId: oldest.approvalId,
+        approved: true,
+        choiceId: matched.choiceId,
+      }]);
+      return this.verdictOutcome(binding, `Recorded: ${matched.label} (${matched.scope}).`);
+    }
+    const attempts = binding.host.approvals.noteVerdictAttempt(oldest.approvalId);
+    if (attempts === 0) {
+      return {
+        text: renderConversationalApprovalPrompt({
+          toolName: oldest.toolName,
+          choices: oldest.choices,
+          attempt: 1,
+          received: text,
+        }),
+        settledLast: false,
+      };
+    }
+    await this.settleApprovalResponses(openCodeSessionId, [{ approvalId: oldest.approvalId, approved: false }]);
+    return this.verdictOutcome(
+      binding,
+      `Denied ${oldest.toolName ? `\`${oldest.toolName}\`` : "the request"} — no valid option was given. Re-prompt to try again.`,
+    );
+  }
+
+  private verdictOutcome(
+    binding: ManagedBinding,
+    recorded: string,
+  ): { text: string; settledLast: boolean } {
+    const remaining = binding.host.approvals.describePending();
+    if (remaining.length === 0) return { text: `${recorded} Resuming…`, settledLast: true };
+    const next = remaining[0]!;
+    return {
+      text: `${recorded}\n\n${renderConversationalApprovalPrompt({
+        toolName: next.toolName,
+        choices: next.choices,
+        attempt: 0,
+      })}`,
+      settledLast: false,
+    };
+  }
+
+  /** Latest offered choices for one pending approval, for prompt rendering. */
+  describePendingApproval(
+    openCodeSessionId: string,
+    approvalId: string,
+    requirementId: string,
+  ): { choices: ConversationalChoice[]; toolName?: string } | undefined {
+    const binding = this.bindings.get(openCodeSessionId);
+    const found = binding?.host.approvals.describePending().find((entry) =>
+      entry.approvalId === approvalId && entry.requirementId === requirementId
+    );
+    if (!found) return undefined;
+    return {
+      choices: found.choices,
+      ...(found.toolName ? { toolName: found.toolName } : {}),
+    };
   }
 
   /** True while the binding's active turn is parked awaiting a verdict. */

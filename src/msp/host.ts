@@ -18,7 +18,7 @@ import {
   MspTransportError,
 } from "../errors.js";
 import { MspClient, type MspConnectionLike, type MspNotification, type MspServerRequest } from "./client.js";
-import { ApprovalExchange, selectApprovalChoiceId, type ApprovalVerdict } from "./approvals.js";
+import { ApprovalExchange, conversationalChoices, selectApprovalChoiceId, type ApprovalVerdict } from "./approvals.js";
 
 export interface MspHostRuntime {
   connection: MspConnectionLike;
@@ -287,8 +287,15 @@ export class MspHost {
     }
     if ("alreadyDecided" in verdict) return {};
     const stage = verdict.params;
-    const choiceId = selectApprovalChoiceId(stage.availableChoices, verdict.approved)
-      ?? (verdict.approved ? selectApprovalChoiceId(stage.availableChoices, false) : null);
+    // A conversational verdict names the exact offered choice; validate it
+    // against what Muse actually offered before deciding. Anything else —
+    // including a stale or invented id — falls through to the interrupt path.
+    const choiceId = "choiceId" in verdict
+      ? (conversationalChoices(stage.availableChoices).some((choice) => choice.choiceId === verdict.choiceId)
+        ? verdict.choiceId
+        : null)
+      : (selectApprovalChoiceId(stage.availableChoices, verdict.approved)
+        ?? (verdict.approved ? selectApprovalChoiceId(stage.availableChoices, false) : null));
     try {
       if (choiceId !== null) {
         await this.command("approval/decide", {

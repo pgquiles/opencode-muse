@@ -67,6 +67,7 @@ function fakeRuntime(options: {
   onCancelParked?: () => void;
   settleMatched?: string[];
   hasParkedApprovals?: boolean;
+  conversationalVerdict?: { text: string; settledLast: boolean } | null;
   gateEventsAfter?: { count: number; release: Promise<void> };
 } = {}) {
   const commands: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -182,6 +183,7 @@ function fakeRuntime(options: {
     async release() { released += 1; markReleased(); },
   };
   const settledResponses: Array<{ sessionID: string; responses: Array<{ approvalId: string; approved: boolean }> }> = [];
+  const consumedVerdicts: Array<{ sessionID: string; text: string }> = [];
   const runtime: MuseLanguageRuntime = {
     selectionIndex,
     videoChunkBytes: options.videoChunkBytes,
@@ -198,6 +200,12 @@ function fakeRuntime(options: {
     ...(options.onDisarm ? {
       disarmParkedJoin() { options.onDisarm?.(); },
     } : {}),
+    ...(options.conversationalVerdict !== undefined ? {
+      async consumeConversationalVerdict(sessionID: string, text: string) {
+        consumedVerdicts.push({ sessionID, text });
+        return options.conversationalVerdict;
+      },
+    } : {}),
   };
   return {
     runtime,
@@ -208,6 +216,7 @@ function fakeRuntime(options: {
     order,
     cursorUpdates,
     settledResponses,
+    consumedVerdicts,
     get released() { return released; },
     releasedPromise,
     get subscriptionReturns() { return subscriptionReturns; },
@@ -906,10 +915,10 @@ describe("Muse LanguageModelV3 bridge", () => {
       const next = await reader.read();
       if (next.done) break;
       parts.push(next.value as unknown as Record<string, unknown>);
-      if (parts.some((part) => part.type === "tool-approval-request")) break;
+      if (parts.some((part) => part.type === "finish")) break;
     }
 
-    expect(parts.map((part) => part.type)).toEqual(["stream-start", "tool-approval-request"]);
+    expect(parts.map((part) => part.type)).toEqual(["stream-start", "text-start", "text-delta", "text-end", "finish"]);
     fake.session.streamEpoch = 8;
     fake.session.handoffLeaseToJoiner = true;
     releaseGate();
@@ -984,6 +993,53 @@ describe("Muse LanguageModelV3 bridge", () => {
 
     const start = fake.commands.find((command) => command.method === "turn/start");
     expect(start?.params).toMatchObject({ reasoningEffort: "high" });
+  });
+
+  test("languageModel.verdictTextReachesConsumeInsteadOfStartingATurn", async () => {
+    const fake = fakeRuntime({
+      events: textEvents(),
+      conversationalVerdict: { text: "I didn't understand — reply A or B.", settledLast: false },
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const parts: Array<Record<string, unknown>> = [];
+    for await (const part of result.stream) parts.push(part as unknown as Record<string, unknown>);
+
+    expect(fake.consumedVerdicts).toEqual([{ sessionID: "ses_model_test", text: "Return the probe answer." }]);
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+    expect(parts.map((part) => part.type)).toEqual(["stream-start", "text-start", "text-delta", "text-end", "finish"]);
+    expect((parts[2] as { delta: string }).delta).toContain("I didn't understand");
+  });
+
+  test("languageModel.decidedVerdictJoinsTheParkedTurnWithoutForwardingText", async () => {
+    const fake = fakeRuntime({
+      events: textEvents("turn-parked"),
+      joinParkedTurnId: "turn-parked",
+      conversationalVerdict: { text: "Recorded: Allow once (once). Resuming…", settledLast: true },
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const parts: Array<Record<string, unknown>> = [];
+    for await (const part of result.stream) parts.push(part as unknown as Record<string, unknown>);
+
+    expect(fake.consumedVerdicts).toEqual([{ sessionID: "ses_model_test", text: "Return the probe answer." }]);
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+    const deltas = parts.filter((part) => part.type === "text-delta").map((part) => (part as { delta: string }).delta);
+    expect(deltas[0]).toContain("Recorded: Allow once");
+    expect(deltas.join("")).toContain("Probe answer");
+    expect(deltas.join("")).not.toContain("Return the probe answer.");
+  });
+
+  test("languageModel.syntheticVerdictGeneratesTextWithoutATurn", async () => {
+    const fake = fakeRuntime({
+      conversationalVerdict: { text: "Denied shell — re-prompt to try again.", settledLast: false },
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doGenerate(callOptions());
+
+    expect(fake.consumedVerdicts).toEqual([{ sessionID: "ses_model_test", text: "Return the probe answer." }]);
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+    expect(result.content).toEqual([{ type: "text", text: "Denied shell — re-prompt to try again." }]);
   });
 
   test("languageModel.cancelWhileParkedDeniesThePendingApproval", async () => {

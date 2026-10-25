@@ -373,6 +373,78 @@ describe("MspHost", () => {
     await host.close();
   });
 
+  test("mspHost.decidesTheExactConversationalChoice", async () => {
+    const transport = new FakeMspTransport((request) => request.method === "initialize"
+      ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }
+      : {});
+    const fake = fakeHandshake(transport);
+    const host = await MspHost.start({ approvalTimeoutMs: 50 }, { createHandshake: () => fake.handshake });
+    transport.deliver({
+      jsonrpc: "2.0",
+      id: 996,
+      method: "approval/request",
+      params: {
+        sessionId: "ses-1",
+        turnId: "turn-1",
+        approvalId: "approval-12",
+        currentRequirementId: "req-1",
+        toolCallId: "call-12",
+        availableChoices: [
+          { choiceId: "allow-once", decision: "approve", label: "Allow once", scope: "once" },
+          { choiceId: "deny", decision: "reject", label: "Deny", scope: "once" },
+        ],
+      },
+    });
+    for (let attempt = 0; attempt < 50 && host.approvals.pendingApprovalIds().length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+
+    expect(host.approvals.settleChoice("approval-12", "allow-once")).toBe(true);
+    for (let attempt = 0; attempt < 50 && !transport.requests.some((request) =>
+      request.method === "approval/decide"
+    ); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    const decide = transport.requests.find((request) => request.method === "approval/decide");
+    expect(decide?.params).toMatchObject({ approvalId: "approval-12", choiceId: "allow-once", requirementId: "req-1" });
+    await host.close();
+  });
+
+  test("mspHost.interruptsOnAnInventedConversationalChoice", async () => {
+    const transport = new FakeMspTransport((request) => request.method === "initialize"
+      ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }
+      : {});
+    const fake = fakeHandshake(transport);
+    const host = await MspHost.start({ approvalTimeoutMs: 50 }, { createHandshake: () => fake.handshake });
+    transport.deliver({
+      jsonrpc: "2.0",
+      id: 997,
+      method: "approval/request",
+      params: {
+        sessionId: "ses-1",
+        turnId: "turn-1",
+        approvalId: "approval-13",
+        currentRequirementId: "req-1",
+        toolCallId: "call-13",
+        availableChoices: [
+          { choiceId: "allow-once", decision: "approve", label: "Allow once", scope: "once" },
+        ],
+      },
+    });
+    for (let attempt = 0; attempt < 50 && host.approvals.pendingApprovalIds().length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+
+    expect(host.approvals.settleChoice("approval-13", "invented")).toBe(true);
+    for (let attempt = 0; attempt < 50 && !transport.requests.some((request) =>
+      request.method === "turn/interrupt"
+    ); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    expect(transport.requests.some((request) => request.method === "approval/decide")).toBe(false);
+    await host.close();
+  });
+
   test("mspHost.deniesApprovalOnVerdictTimeout", async () => {
     const transport = new FakeMspTransport((request) => request.method === "initialize"
       ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }

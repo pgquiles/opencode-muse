@@ -142,6 +142,9 @@ export async function createProviderPlugin(
         settleApprovalResponses: (sessionID, responses) => sessions.settleApprovalResponses(sessionID, responses),
         hasParkedApprovals: (sessionID) => sessions.hasParkedApprovals(sessionID),
         disarmParkedJoin: (sessionID) => sessions.disarmParkedJoin(sessionID),
+        consumeConversationalVerdict: (sessionID, text) => sessions.consumeConversationalVerdict(sessionID, text),
+        describePendingApproval: (sessionID, approvalId, requirementId) =>
+          sessions.describePendingApproval(sessionID, approvalId, requirementId),
       }, input.model.modelID);
     }, { providerID: MUSE_PROVIDER_ID });
     localMetaRegistrations.push(await ctx.session.hook("title", async (input) => {

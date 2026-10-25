@@ -110,11 +110,15 @@ the billed lane with `muse usage`. See
 
 ## Current limitations
 
-- **Approvals and questions:** OpenCode/OpenChamber cannot yet show Muse's exact
-  approval choices or all structured questions. If Muse asks for one, the
-  plugin stops safely rather than guessing or approving on your behalf. See
-  [#6](https://github.com/pgquiles/opencode-muse/issues/6) and
-  [#22](https://github.com/pgquiles/opencode-muse/issues/22).
+- **Approvals:** OpenCode core drops provider approval prompts and offers no
+  verdict channel (see [#22](https://github.com/pgquiles/opencode-muse/issues/22)),
+  so the plugin resolves them conversationally instead: Muse's exact options
+  are shown as a lettered list, your next message picks one (fuzzy match on
+  letter, number, or name), anything unrecognized is asked once more, then
+  denied — ambiguity never approves. Verdicts skip OpenCode permission rules
+  until core ships native support. Structured questions beyond approvals are
+  still unsupported. See [#6](https://github.com/pgquiles/opencode-muse/issues/6)
+  and [#30](https://github.com/pgquiles/opencode-muse/issues/30).
 - **Files and response formats:** The bridge accepts text, PNG/JPEG/GIF/WebP
   images, and MP4/MOV video. Audio and PDF attachments are not supported.
   Strict JSON output and some OpenCode generation settings (such as

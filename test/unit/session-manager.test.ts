@@ -480,6 +480,143 @@ describe("MuseSessionManager", () => {
     await manager.close();
   });
 
+  test("sessionManager.consumesAConversationalVerdictAndArmsTheJoin", async () => {
+    const root = tempRoot();
+    const { manager, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = exchanges[0] as ApprovalExchange;
+    const parked = exchange.requestApproval({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      approvalId: "approval-9",
+      currentRequirementId: "req-1",
+      toolCallId: "call-9",
+      toolName: "shell",
+      availableChoices: [
+        { choiceId: "allow-once", decision: "approve", label: "Allow once", scope: "once" },
+        { choiceId: "deny-once", decision: "reject", label: "Deny", scope: "once" },
+      ],
+    });
+
+    const outcome = await manager.consumeConversationalVerdict("ses_oc_1", "a");
+    const verdict = await parked;
+
+    expect(verdict).toMatchObject({ choiceId: "allow-once" });
+    expect(outcome).toMatchObject({ settledLast: true });
+    expect(outcome?.text).toContain("Recorded: Allow once (once).");
+    expect(first.joinParkedTurnId).toBe("turn-1");
+    await manager.close();
+  });
+
+  test("sessionManager.reasksOnceThenDeniesAmbiguousVerdicts", async () => {
+    const root = tempRoot();
+    const { manager, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = exchanges[0] as ApprovalExchange;
+    const parked = exchange.requestApproval({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      approvalId: "approval-9",
+      currentRequirementId: "req-1",
+      toolCallId: "call-9",
+      availableChoices: [
+        { choiceId: "allow-once", decision: "approve", label: "Allow once", scope: "once" },
+        { choiceId: "deny-once", decision: "reject", label: "Deny", scope: "once" },
+      ],
+    });
+
+    const reask = await manager.consumeConversationalVerdict("ses_oc_1", "yes please");
+    expect(reask).toMatchObject({ settledLast: false });
+    expect(reask?.text).toContain("yes please");
+    expect(exchange.pendingApprovalIds()).toEqual(["approval-9"]);
+
+    const denied = await manager.consumeConversationalVerdict("ses_oc_1", "uh huh");
+    const verdict = await parked;
+    expect(verdict).toMatchObject({ approved: false });
+    expect(denied).toMatchObject({ settledLast: true });
+    expect(denied?.text).toContain("Denied");
+    expect(first.joinParkedTurnId).toBe("turn-1");
+    await manager.close();
+  });
+
+  test("sessionManager.queuesMultiplePendingApprovalsOldestFirst", async () => {
+    const root = tempRoot();
+    const { manager, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = exchanges[0] as ApprovalExchange;
+    const firstParked = exchange.requestApproval({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      approvalId: "approval-9",
+      currentRequirementId: "req-1",
+      toolCallId: "call-9",
+      toolName: "shell",
+      availableChoices: [
+        { choiceId: "allow-once", decision: "approve", label: "Allow once", scope: "once" },
+        { choiceId: "deny-once", decision: "reject", label: "Deny", scope: "once" },
+      ],
+    });
+    const secondParked = exchange.requestApproval({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      approvalId: "approval-10",
+      currentRequirementId: "req-1",
+      toolCallId: "call-10",
+      toolName: "edit_file",
+      availableChoices: [
+        { choiceId: "write-once", decision: "approve", label: "Write file", scope: "once" },
+        { choiceId: "deny-write", decision: "reject", label: "Deny", scope: "once" },
+      ],
+    });
+
+    const queued = await manager.consumeConversationalVerdict("ses_oc_1", "a");
+    expect(await firstParked).toMatchObject({ choiceId: "allow-once" });
+    expect(queued).toMatchObject({ settledLast: false });
+    expect(queued?.text).toContain("Recorded: Allow once (once).");
+    expect(queued?.text).toContain("edit_file");
+
+    const last = await manager.consumeConversationalVerdict("ses_oc_1", "Write file");
+    expect(await secondParked).toMatchObject({ choiceId: "write-once" });
+    expect(last).toMatchObject({ settledLast: true });
+    expect(first.joinParkedTurnId).toBe("turn-1");
+    await manager.close();
+  });
+
+  test("sessionManager.deniesApprovalsWithoutPresentableChoices", async () => {
+    const root = tempRoot();
+    const { manager, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = exchanges[0] as ApprovalExchange;
+    const parked = exchange.requestApproval({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      approvalId: "approval-9",
+      currentRequirementId: "req-1",
+      toolCallId: "call-9",
+      availableChoices: [{ choiceId: "x", decision: "reject", scope: "once" }],
+    });
+
+    const outcome = await manager.consumeConversationalVerdict("ses_oc_1", "a");
+    const verdict = await parked;
+
+    expect(verdict).toMatchObject({ approved: false });
+    expect(outcome).toMatchObject({ settledLast: true });
+    expect(outcome?.text).toContain("no usable options");
+    await manager.close();
+  });
+
   test("sessionManager.disarmsJoinsThatCannotAttach", async () => {
     const root = tempRoot();
     const { manager, exchanges } = managerAt(root);

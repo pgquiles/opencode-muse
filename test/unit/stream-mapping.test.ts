@@ -184,8 +184,16 @@ describe("Muse → LanguageModelV3 stream mapping", () => {
     expect(parts[0]?.error).toMatchObject({ turnErrorKind: "unknown" });
   });
 
-  test("stream.emitsAToolApprovalRequestForAnApprovalRequestedNotification", () => {
-    const mapper = new MuseStreamMapper("turn-1");
+  test("stream.endsTheTurnWithAConversationalPromptForAnApprovalRequestedNotification", () => {
+    const mapper = new MuseStreamMapper("turn-1", new Set(), (approvalId) => approvalId === "approval-1"
+      ? {
+        choices: [
+          { choiceId: "allow-once", label: "Allow once", scope: "once" },
+          { choiceId: "deny-once", label: "Deny", scope: "once" },
+        ],
+        toolName: "shell",
+      }
+      : undefined);
     const parts = mapper.accept(event("approval/requested", {
       sessionId: "ses-1",
       turnId: "turn-1",
@@ -194,22 +202,48 @@ describe("Muse → LanguageModelV3 stream mapping", () => {
       toolCallId: "call-1",
       toolName: "shell",
     }));
-    expect(parts).toEqual([{
-      type: "tool-approval-request",
-      approvalId: "approval-1",
-      toolCallId: "call-1",
-      providerMetadata: { muse: { toolName: "shell" } },
-    }]);
+    expect(parts.map((part) => (part as { type: string }).type)).toEqual([
+      "text-start",
+      "text-delta",
+      "text-end",
+      "finish",
+    ]);
+    const delta = (parts[1] as { delta: string }).delta;
+    expect(delta).toContain("opencode-muse bridge message");
+    expect(delta).toContain("shell");
+    expect(delta).toContain("A. Allow once (once)");
+    expect(delta).toContain("B. Deny (once)");
+    expect(delta).toContain("Reply with one option");
+    expect((parts[3] as { finishReason: { unified: string } }).finishReason).toMatchObject({ unified: "stop" });
   });
 
-  test("stream.omitsToolNameMetadataWhenTheNotificationCarriesNone", () => {
+  test("stream.fallsBackToTheNotificationToolNameWithoutACatalogLookup", () => {
     const mapper = new MuseStreamMapper("turn-1");
     const parts = mapper.accept(event("approval/requested", {
       sessionId: "ses-1",
       approvalId: "approval-1",
       toolCallId: "call-1",
+      toolName: "shell",
     }));
-    expect(parts).toEqual([{ type: "tool-approval-request", approvalId: "approval-1", toolCallId: "call-1" }]);
+    const delta = (parts[1] as { delta: string }).delta;
+    expect(delta).toContain("shell");
+    expect(delta).toContain("denies on timeout");
+  });
+
+  test("stream.explainsWhenNoChoicesArePresentable", () => {
+    const mapper = new MuseStreamMapper("turn-1", new Set(), () => ({ choices: [] }));
+    const parts = mapper.accept(event("approval/requested", {
+      sessionId: "ses-1",
+      approvalId: "approval-1",
+      toolCallId: "call-1",
+    }));
+    expect(parts.map((part) => (part as { type: string }).type)).toEqual([
+      "text-start",
+      "text-delta",
+      "text-end",
+      "finish",
+    ]);
+    expect((parts[1] as { delta: string }).delta).toContain("no presentable options");
   });
 
   test("stream.ignoresMalformedApprovalRequestsWithoutEmitting", () => {
@@ -229,7 +263,7 @@ describe("Muse → LanguageModelV3 stream mapping", () => {
       approvalId: "approval-1",
       currentRequirementId: "req-1",
       toolCallId: "call-1",
-    }))).toHaveLength(1);
+    }))).toHaveLength(4);
     expect(first.accept(event("approval/requested", {
       sessionId: "ses-1",
       approvalId: "approval-1",
@@ -248,6 +282,6 @@ describe("Muse → LanguageModelV3 stream mapping", () => {
       approvalId: "approval-1",
       currentRequirementId: "req-2",
       toolCallId: "call-1",
-    }))).toHaveLength(1);
+    }))).toHaveLength(4);
   });
 });

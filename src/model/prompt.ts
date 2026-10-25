@@ -213,12 +213,16 @@ export function extractTurnInput(
 export interface ApprovalResponse {
   approvalId: string;
   approved: boolean;
+  /** Exact offered choice for a conversational verdict; validated on decide. */
+  choiceId?: string;
 }
 
 /**
- * Collect OpenCode's answers to previously emitted `tool-approval-request`
- * chunks. Malformed entries are ignored; the caller treats an unmatched
- * response as stale and drops it rather than failing the turn.
+ * Collect OpenCode's answers to approval prompts. Core never delivers these
+ * (it drops the request parts), so conversational verdicts are consumed
+ * separately; both funnels meet in `settleApprovalResponses`. Malformed
+ * entries are ignored; the caller treats an unmatched response as stale and
+ * drops it rather than failing the turn.
  */
 export function extractApprovalResponses(prompt: LanguageModelV3Prompt): ApprovalResponse[] {
   const responses: ApprovalResponse[] = [];

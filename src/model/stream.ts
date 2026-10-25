@@ -5,6 +5,10 @@ import {
 } from "../errors.js";
 import type { MspNotification } from "../msp/client.js";
 import { notificationCursorKey } from "../msp/notification.js";
+import {
+  renderConversationalApprovalPrompt,
+  type ConversationalChoice,
+} from "../msp/approvals.js";
 
 export interface FlatMuseUsage {
   inputTokens: number | undefined;
@@ -51,7 +55,14 @@ export class MuseStreamMapper {
   terminal?: string;
   failure?: Error;
 
-  constructor(readonly turnId: string, private readonly emittedApprovals: Set<string> = new Set()) {}
+  constructor(
+    readonly turnId: string,
+    private readonly emittedApprovals: Set<string> = new Set(),
+    private readonly approvalChoices?: (
+      approvalId: string,
+      requirementId: string,
+    ) => { choices: ConversationalChoice[]; toolName?: string } | undefined,
+  ) {}
 
   get generatedText(): string {
     return this.textParts.map((part) => part.text).join("");
@@ -118,13 +129,23 @@ export class MuseStreamMapper {
     const stageKey = `${approvalId} ${requirementId}`;
     if (this.emittedApprovals.has(stageKey)) return [];
     this.emittedApprovals.add(stageKey);
-    const toolName = params.toolName;
-    return [{
-      type: "tool-approval-request",
-      approvalId,
-      toolCallId,
-      ...(typeof toolName === "string" ? { providerMetadata: { muse: { toolName } } } : {}),
-    }];
+    // A parked approval ends the OpenCode turn with a conversational prompt
+    // instead of a part core drops. The verdict arrives as the next user
+    // message; the parked turn resumes once it is decided.
+    const described = this.approvalChoices?.(approvalId, requirementId);
+    const choices = described?.choices ?? [];
+    const toolName = described?.toolName ?? (typeof params.toolName === "string" ? params.toolName : undefined);
+    const prompt = choices.length > 0
+      ? renderConversationalApprovalPrompt({ toolName, choices, attempt: 0 })
+      : `**Approval needed** (opencode-muse bridge message, not the model): Muse requested approval${toolName ? ` to run \`${toolName}\`` : ""} but offered no presentable options; the parked turn denies on timeout. Re-prompt to try again.`;
+    const itemId = `approval-${approvalId}`;
+    this.textParts.push({ type: "text", text: prompt });
+    return [
+      { type: "text-start", id: itemId },
+      { type: "text-delta", id: itemId, delta: prompt },
+      { type: "text-end", id: itemId },
+      this.finishPart("stop", "approval-parked"),
+    ];
   }
 
   private itemStartedEvent(params: Record<string, unknown>): MuseStreamPart[] {

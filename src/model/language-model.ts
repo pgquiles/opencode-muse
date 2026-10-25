@@ -71,6 +71,8 @@ export interface MuseLanguageRuntime {
   settleApprovalResponses?(sessionID: string, responses: ApprovalResponse[]): Promise<string[]>;
   hasParkedApprovals?(sessionID: string): boolean | Promise<boolean>;
   disarmParkedJoin?(sessionID: string): void;
+  consumeConversationalVerdict?(sessionID: string, text: string): Promise<{ text: string; settledLast: boolean } | null>;
+  describePendingApproval?(sessionID: string, approvalId: string, requirementId: string): { choices: Array<{ choiceId: string; label: string; scope: string }>; toolName?: string } | undefined;
 }
 
 export interface MuseTurnExecution {
@@ -79,6 +81,32 @@ export interface MuseTurnExecution {
   disposition: string;
   events: AsyncIterable<MspNotification>;
   cancel(): Promise<void>;
+}
+
+/** Verdict text is the concatenated user text, if any; media alone never decides. */
+function userTextOf(parts: ExtractedTurnPart[]): string {
+  return parts
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+}
+
+/** Bridge prompt rendering to the stream mapper for one OpenCode session. */
+function describeApprovals(runtime: MuseLanguageRuntime, sessionID: string) {
+  return (approvalId: string, requirementId: string) =>
+    runtime.describePendingApproval?.(sessionID, approvalId, requirementId);
+}
+
+/** A verdict turn that needs no Muse turn: re-asks and queued prompts. */
+function syntheticVerdictExecution(): MuseTurnExecution {
+  return {
+    turnId: "synthetic-verdict",
+    commandId: "synthetic-verdict",
+    disposition: "synthetic",
+    events: (async function* (): AsyncGenerator<MspNotification> {})(),
+    cancel: async () => {},
+  };
 }
 
 const DEFAULT_VIDEO_CHUNK_BYTES = 6 * 1024 * 1024;
@@ -562,10 +590,16 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
           return {
             context,
             execution,
-            mapper: new MuseStreamMapper(execution.turnId, session.emittedApprovalPrompts),
+            mapper: new MuseStreamMapper(
+              execution.turnId,
+              session.emittedApprovalPrompts,
+              describeApprovals(runtime, context.sessionID),
+            ),
             warnings: ignoredOptionWarnings(supportedOptions.options.ignoredOptions),
             epoch: session.streamEpoch,
             session,
+            initialText: undefined,
+            syntheticOnly: false,
           };
         } catch (error) {
           runtime.disarmParkedJoin?.(context.sessionID);
@@ -576,23 +610,48 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
       else await session.release?.();
       throw inputErrorToException(extracted.error);
     }
+    // Conversational approval verdicts: with approvals pending and fresh
+    // user text (and no legacy structured responses), the message decides
+    // the oldest approval instead of starting a turn. Verdict text is never
+    // forwarded to the model.
+    const verdictText = approvalResponses.length === 0 ? userTextOf(extracted.parts) : "";
+    let initialText: string | undefined;
+    let syntheticOnly = false;
+    if (verdictText !== "") {
+      const outcome = await runtime.consumeConversationalVerdict?.(context.sessionID, verdictText);
+      if (outcome) {
+        initialText = outcome.text;
+        // Join only the final verdict while the parked turn is still
+        // attached: it resumes the turn. Re-asks, queued approvals, and
+        // dead turns end synthetically with the outcome text.
+        syntheticOnly = !outcome.settledLast || session.joinParkedTurnId === undefined;
+      }
+    }
     let execution: MuseTurnExecution;
     try {
-      execution = await runMuseTurn(context, extracted.parts, options, {
-        ...runtime,
-        resolveSession: async () => session,
-      }, extracted.nextTranscriptFingerprints);
+      execution = syntheticOnly
+        ? syntheticVerdictExecution()
+        : await runMuseTurn(context, initialText !== undefined ? [] : extracted.parts, options, {
+          ...runtime,
+          resolveSession: async () => session,
+        }, extracted.nextTranscriptFingerprints);
     } catch (error) {
-      if (joining) runtime.disarmParkedJoin?.(context.sessionID);
+      if (joining || session.joinParkedTurnId !== undefined) runtime.disarmParkedJoin?.(context.sessionID);
       throw error;
     }
     return {
       context,
       execution,
-      mapper: new MuseStreamMapper(execution.turnId, session.emittedApprovalPrompts),
+      mapper: new MuseStreamMapper(
+        execution.turnId,
+        session.emittedApprovalPrompts,
+        describeApprovals(runtime, context.sessionID),
+      ),
       warnings: ignoredOptionWarnings(supportedOptions.options.ignoredOptions),
       epoch: session.streamEpoch,
       session,
+      initialText,
+      syntheticOnly,
     };
   };
 
@@ -623,6 +682,20 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
           controllerRef = controller;
           controller.enqueue({ type: "stream-start", warnings: prepared.warnings } as unknown as LanguageModelV3StreamPart);
           void (async () => {
+            if (prepared.initialText !== undefined) {
+              controller.enqueue({ type: "text-start", id: "bridge-verdict" } as unknown as LanguageModelV3StreamPart);
+              controller.enqueue({ type: "text-delta", id: "bridge-verdict", delta: prepared.initialText } as unknown as LanguageModelV3StreamPart);
+              controller.enqueue({ type: "text-end", id: "bridge-verdict" } as unknown as LanguageModelV3StreamPart);
+              if (prepared.syntheticOnly) {
+                controller.enqueue({
+                  type: "finish",
+                  finishReason: { unified: "stop", raw: "conversational-verdict" },
+                  usage: resultUsage(prepared.mapper.usage),
+                } as unknown as LanguageModelV3StreamPart);
+                closeOutput();
+                return;
+              }
+            }
             try {
               for await (const notification of prepared.execution.events) {
                 // A newer call took over this session's output: end this
@@ -672,6 +745,14 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
       }
       if (requestKind === "unsupported-generate") throw new MuseUnsupportedRequestError("generate");
       const prepared = await doPrepare(options, false);
+      if (prepared.syntheticOnly) {
+        return {
+          content: prepared.initialText !== undefined ? [{ type: "text", text: prepared.initialText }] : [],
+          finishReason: { unified: "stop", raw: "conversational-verdict" },
+          usage: resultUsage(undefined),
+          warnings: prepared.warnings,
+        } as unknown as Awaited<ReturnType<LanguageModelV3["doGenerate"]>>;
+      }
       let terminalError: Error | undefined;
       const iterator = prepared.execution.events[Symbol.asyncIterator]();
       while (true) {
@@ -703,7 +784,9 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
       }
       if (terminalError) throw terminalError;
       return {
-        content: prepared.mapper.content,
+        content: prepared.initialText !== undefined
+          ? [{ type: "text", text: prepared.initialText }, ...prepared.mapper.content]
+          : prepared.mapper.content,
         finishReason: prepared.mapper.finishReason ?? { unified: "other", raw: undefined },
         usage: resultUsage(prepared.mapper.usage),
         warnings: prepared.warnings,
