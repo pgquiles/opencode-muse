@@ -187,6 +187,10 @@ export class MuseSessionManager {
           workspaceRoot: canonicalDirectory,
           providerId: selected.providerId,
           modelId: selected.modelId,
+          // #22: Muse must ask through approval/request so OpenCode stays in
+          // the loop; the host default would let side-effectful actions
+          // through silently.
+          approvalMode: "onRequest",
         });
         const startedSessionId = sessionIdFrom(start);
         if (!startedSessionId) throw new MuseRecoveryChoiceRequiredError();

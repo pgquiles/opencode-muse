@@ -389,6 +389,21 @@ describe("MuseSessionManager", () => {
     });
   }
 
+  test("sessionManager.startsMuseSessionsWithOnRequestApprovalMode", async () => {
+    const root = tempRoot();
+    const { manager, calls } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const binding = await manager.resolveSession(context("ses_oc_1", directory));
+
+    expect(calls.filter((call) => call.method === "session/start")).toHaveLength(1);
+    expect(calls.find((call) => call.method === "session/start")?.params).toMatchObject({
+      approvalMode: "onRequest",
+    });
+    await binding.release?.();
+    await manager.close();
+  });
+
   test("sessionManager.settlesApprovalResponsesAndArmsJoinForTheActiveTurn", async () => {
     const root = tempRoot();
     const { manager, calls, exchanges } = managerAt(root);
