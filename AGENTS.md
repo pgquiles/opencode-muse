@@ -36,3 +36,7 @@
 - Use strict TypeScript/ES modules and follow the surrounding plugin conventions. Add focused tests before implementation (TDD); default to fake MSP hosts for unit/integration tests.
 - Run the package build and test scripts after code changes. Run live PAYG probes only when needed, using the official CLI and sanitized logs; a subscription is not required for ordinary development.
 - Before public release, re-check the applicable Meta terms and document exact supported versions, probe results, and limitations.
+
+## Release
+
+- npm publishes only through `.github/workflows/publish-npm.yml` (OIDC trusted publishing, triggered by `gh release create`). Never run `npm publish` from a laptop: account 2FA makes it fail with EOTP and the attempt is redundant once the release exists.
