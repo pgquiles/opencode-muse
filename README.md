@@ -93,6 +93,9 @@ the billed lane with `muse usage`. See
   your OpenCode plugin configuration.
 - Keep Muse sign-in and inference inside the official Muse CLI; the plugin
   never copies or stores your subscription credentials.
+- Bill through the Contributor lane by default, like the Muse TUI, with a
+  documented opt-out to the Standard lane. See [Configuration](#configuration)
+  and [#29](https://github.com/pgquiles/opencode-muse/issues/29).
 - Continue text conversations in a mapped Muse session, including resuming
   supported sessions and replaying available session updates after reconnects.
 - Attach supported images (PNG, JPEG, GIF, WebP) and videos (MP4, MOV) to a
@@ -105,22 +108,34 @@ the billed lane with `muse usage`. See
   (`opencode run --model muse/…#high`) selects one explicitly. Unknown variants
   fail the turn instead of guessing. See
   [#28](https://github.com/pgquiles/opencode-muse/issues/28).
+- Answer Muse's permission prompts conversationally: Muse's exact options are
+  shown as a lettered list and your next message picks one (fuzzy match on
+  letter, number, or name). Anything unrecognized is asked once more, then
+  denied — ambiguity never approves. Queued prompts are answered
+  first-in-first-out with an echo of what was granted. See
+  [#30](https://github.com/pgquiles/opencode-muse/issues/30).
+- Answer Muse's structured option-questions conversationally: the oldest
+  unanswered question renders as a lettered list and your next message
+  answers it the same forgiving-match way, with the question echoed back on
+  success. See [#31](https://github.com/pgquiles/opencode-muse/issues/31).
+- Stay working across Muse CLI updates: capability checks against the pinned
+  CLI mean a newer CLI fingerprint starts with a recorded warning instead of
+  failing, and only a missing/malformed fingerprint or an unsupported
+  envelope version fails closed. See
+  [#21](https://github.com/pgquiles/opencode-muse/issues/21).
 - Let Muse run its own agent and tools, while the plugin prevents overlapping
   writes to the same workspace.
 
 ## Current limitations
 
-- **Approvals:** OpenCode core drops provider approval prompts and offers no
-  verdict channel (see [#22](https://github.com/pgquiles/opencode-muse/issues/22)),
-  so the plugin resolves them conversationally instead: Muse's exact options
-  are shown as a lettered list, your next message picks one (fuzzy match on
-  letter, number, or name), anything unrecognized is asked once more, then
-  denied — ambiguity never approves. Verdicts skip OpenCode permission rules
-  until core ships native support. Structured option-questions are answered
-  the same conversational way (single-select only; anything else cancels
-  with a reason). See [#6](https://github.com/pgquiles/opencode-muse/issues/6),
-  [#30](https://github.com/pgquiles/opencode-muse/issues/30), and
-  [#31](https://github.com/pgquiles/opencode-muse/issues/31).
+- **Approvals:** conversational verdicts skip OpenCode permission rules until
+  core ships a native verdict channel (tracked in
+  [#22](https://github.com/pgquiles/opencode-muse/issues/22)). The
+  conversational flow above stands in meanwhile.
+- **Structured input:** single-select option-questions are answered
+  conversationally; multi-select and option-less questions cancel with a
+  reason until native structured input lands (tracked in
+  [#6](https://github.com/pgquiles/opencode-muse/issues/6)).
 - **Files and response formats:** The bridge accepts text, PNG/JPEG/GIF/WebP
   images, and MP4/MOV video. Audio and PDF attachments are not supported.
   Strict JSON output and some OpenCode generation settings (such as
@@ -139,16 +154,10 @@ the billed lane with `muse usage`. See
   been tested, but recovery from a real Muse event gap has only been tested
   with a simulated gap. See
   [#23](https://github.com/pgquiles/opencode-muse/issues/23).
-- **Muse CLI compatibility:** The plugin is pinned to SDK 1.4.12 and speaks
-  envelope schema version 1. A newer CLI fingerprint starts with a recorded
-  warning instead of failing closed; a missing/malformed fingerprint or an
-  unsupported envelope version still fails closed. See
-  [#21](https://github.com/pgquiles/opencode-muse/issues/21).
 - **Billing:** opencode-muse is subscription-only; for pay-as-you-go use
-  OpenCode's official OpenAI-compatible provider (`metamate`). Every serve
-  host requests the Contributor lane unless opted out; only `muse usage`
-  confirms the billed lane, and unknown Contributor settings fail closed
-  instead of guessing. Contributor catalog rows bill the requested lane
+  OpenCode's official OpenAI-compatible provider (`metamate`). Only
+  `muse usage` confirms the billed lane, and unknown Contributor settings fail
+  closed instead of guessing. Contributor catalog rows bill the requested lane
   like every other row. See [Configuration](#configuration) and
   [#29](https://github.com/pgquiles/opencode-muse/issues/29).
 - **Simultaneous work:** The plugin allows only one active writer per
@@ -157,6 +166,9 @@ the billed lane with `muse usage`. See
 
 ## Troubleshooting
 
+- **Contributor mode is fully supported and is the default** (see
+  [Configuration](#configuration)). If something labeled "Contributor" fails,
+  check which provider it belongs to first:
 - **"Muse Spark 1.3 Contributor" never connects after a model switch:** that
   entry is a retired OpenCode-gateway model (`opencode/muse-spark-1.3-contributor-free`),
   not this plugin's model. It no longer resolves anywhere, so OpenCode keeps
