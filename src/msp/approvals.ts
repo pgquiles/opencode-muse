@@ -116,6 +116,15 @@ interface PendingApproval {
   verdictAttempts?: number;
 }
 
+/**
+ * First-turn instruction so the model does not ask for permission in prose
+ * on top of the enforced prompt (the double-ask). Attempting is safe: the
+ * bridge parks the call and presents the approval itself. Never a grant,
+ * never self-approval — it only removes the redundant round trip.
+ */
+export const APPROVAL_BRIDGE_INSTRUCTION =
+  "[opencode-muse bridge instruction, not user input: tool approvals are enforced by the bridge's own prompt — do not ask the user for permission in prose, attempt the call and let the bridge present the approval. Never approve an action yourself.]";
+
 /** A validated offer from `availableChoices`, in presented order. */
 export interface ConversationalChoice {
   choiceId: string;

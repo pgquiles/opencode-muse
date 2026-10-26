@@ -141,6 +141,17 @@ describe("MuseSessionManager", () => {
     await manager.close();
   });
 
+  test("sessionManager.briefsTheModelAgainstProsePermissionAsks", async () => {
+    const root = tempRoot();
+    const { manager } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+
+    expect(first.sessionNotices?.join("\n")).toContain("do not ask the user for permission in prose");
+    await manager.close();
+  });
+
   test("sessionManager.spawnsServeWithTheRequestedBillingLane", async () => {
     for (const [mode, flag] of [[undefined, "on"], ["off", "off"]] as const) {
       const root = tempRoot();

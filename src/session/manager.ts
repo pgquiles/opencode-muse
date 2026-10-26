@@ -6,6 +6,7 @@ import type { RequestContext } from "../types.js";
 import { MspHost } from "../msp/host.js";
 import { baseServeArgs, type ContributorMode } from "../msp/contributor.js";
 import {
+  APPROVAL_BRIDGE_INSTRUCTION,
   matchConversationalChoice,
   renderConversationalApprovalPrompt,
   type ConversationalChoice,
@@ -210,7 +211,10 @@ export class MuseSessionManager {
       let viewCursor: string | undefined;
       let replayAfterCursor: string | undefined;
       let worktree: ManagedWorktree | undefined;
-      const sessionNotices: string[] = [];
+      // First-turn bridge context (approval instruction first, then any
+      // worktree notices). Only new bindings get notices; re-resolves reuse
+      // the binding's list, and resumed sessions with history skip them.
+      const sessionNotices: string[] = [APPROVAL_BRIDGE_INSTRUCTION];
       if (stored && durability !== "ephemeral") {
         const resumed = await host.command("session/resume", {
           commandId: host.mintCommandId(),
@@ -252,6 +256,7 @@ export class MuseSessionManager {
         };
         let start: Record<string, unknown>;
         let worktreeAttempted = false;
+        let worktreeFallback = false;
         if (experimentalWorktrees) {
           worktreeAttempted = true;
           try {
@@ -269,6 +274,7 @@ export class MuseSessionManager {
             // A changed payload must never reuse the rejected command's id
             // (the host treats id+payload as the idempotency key).
             start = await host.command("session/start", { ...startParams, commandId: host.mintCommandId() });
+            worktreeFallback = true;
             sessionNotices.push(
               ...composeWorktreeNotices({
                 workspaceRoot: canonicalDirectory,
@@ -283,7 +289,7 @@ export class MuseSessionManager {
         if (!startedSessionId) throw new MuseRecoveryChoiceRequiredError();
         museSessionId = startedSessionId;
         viewCursor = cursorFrom(start);
-        if (worktreeAttempted && !sessionNotices.length) {
+        if (worktreeAttempted && !worktreeFallback) {
           // Verify-and-bind: resolve the managed path and the sharing
           // picture. A failed verify leaves a working session whose
           // worktree can neither be labeled nor purged.

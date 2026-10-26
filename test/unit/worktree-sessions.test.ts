@@ -197,7 +197,8 @@ describe("post-v1 worktree sessions (#34)", () => {
     expect(starts[0]!.params).not.toHaveProperty("worktree");
     expect(calls.some((c) => c.method === "worktree/list")).toBe(false);
     expect(session.worktree).toBeUndefined();
-    expect(session.sessionNotices ?? []).toEqual([]);
+    expect(session.sessionNotices?.join("\n")).toContain("do not ask the user for permission in prose");
+    expect(session.sessionNotices?.join("\n")).not.toContain("single-writer lock");
     await manager.close();
   });
 
