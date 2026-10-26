@@ -1,3 +1,4 @@
+import type { LanguageModelV3Usage } from "@ai-sdk/provider";
 import {
   MspProtocolError,
   MuseTurnFailedError,
@@ -21,6 +22,30 @@ export interface FlatMuseUsage {
   outputTokens: number | undefined;
   totalTokens: number | undefined;
   reasoningTokens: number | undefined;
+}
+
+/**
+ * Bridge usage to the V3 contract, the single funnel for every finish part
+ * and result the bridge emits. The nested token objects must always exist —
+ * OpenCode reads `inputTokens.total` directly, so a missing object crashes
+ * the turn with "undefined is not an object". Totals stay undefined when
+ * unobserved (synthetic turns bill nothing); only the containers are
+ * guaranteed.
+ */
+export function resultUsage(usage: FlatMuseUsage | undefined): LanguageModelV3Usage {
+  return {
+    inputTokens: {
+      total: usage?.inputTokens,
+      noCache: undefined,
+      cacheRead: undefined,
+      cacheWrite: undefined,
+    },
+    outputTokens: {
+      total: usage?.outputTokens,
+      text: undefined,
+      reasoning: usage?.reasoningTokens,
+    },
+  };
 }
 
 export type MuseStreamPart = Record<string, unknown>;
@@ -325,15 +350,12 @@ export class MuseStreamMapper {
   private finishPart(unified: "stop" | "error" | "other", raw: string): MuseStreamPart {
     this.finishWasSent = true;
     this.currentFinishReason = { unified, raw };
+    // Verbatim pass-through to OpenCode: always nested V3 containers, even
+    // when nothing was observed (totals stay undefined).
     return {
       type: "finish",
       finishReason: this.currentFinishReason,
-      usage: this.usage ?? {
-        inputTokens: undefined,
-        outputTokens: undefined,
-        totalTokens: undefined,
-        reasoningTokens: undefined,
-      },
+      usage: resultUsage(this.usage),
     };
   }
 }

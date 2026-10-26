@@ -142,6 +142,23 @@ describe("Muse → LanguageModelV3 stream mapping", () => {
     expect(mapper.usage).toBeUndefined();
   });
 
+  test("stream.finishCarriesNestedUsageWhenMuseReportsNone", () => {
+    // Finish parts pass through to OpenCode verbatim, and core reads
+    // usage.inputTokens.total — a flat shape with undefined leaves crashes
+    // the turn, so the containers must always exist.
+    const mapper = new MuseStreamMapper("turn-1");
+    const parts = mapper.accept(event("turn/completed", {
+      sessionId: "ses-1", turnId: "turn-1", terminal: "completed",
+    }));
+    const finish = parts.find((part) => (part as { type: string }).type === "finish");
+    expect(finish).toMatchObject({
+      usage: {
+        inputTokens: { total: undefined, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+        outputTokens: { total: undefined, text: undefined, reasoning: undefined },
+      },
+    });
+  });
+
   test("stream.finishesForegroundAnswerButAcceptsBackgroundTerminalForMonitoring", () => {
     const mapper = new MuseStreamMapper("turn-1");
     const foreground = mapper.accept(event("turn/foregroundCompleted", {

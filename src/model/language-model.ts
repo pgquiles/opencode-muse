@@ -2,7 +2,6 @@ import type {
   LanguageModelV3,
   LanguageModelV3CallOptions,
   LanguageModelV3StreamPart,
-  LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 import { createHash } from "node:crypto";
 import { MspCommandRejectedError, MuseBridgeError, MuseRecoveryChoiceRequiredError, MuseTranscriptDivergedError, MuseUnsupportedInputError, MuseUnsupportedRequestError, MspProtocolError, MspTransportError } from "../errors.js";
@@ -20,7 +19,7 @@ import {
   type ContextFragment,
   type ExtractedTurnPart,
 } from "./prompt.js";
-import { MuseStreamMapper, type FlatMuseUsage } from "./stream.js";
+import { MuseStreamMapper, resultUsage } from "./stream.js";
 import type { MuseModelSelection, RequestContext } from "../types.js";
 import type { UserInputQuestion as UserInputQuestionShape } from "../msp/user-input.js";
 import type { TranscribeAudio } from "../msp/transcribe.js";
@@ -517,29 +516,6 @@ function ignoredOptionWarnings(ignoredOptions: readonly string[]): Array<Record<
     feature,
     details: "Muse MSP does not expose this per-turn option; the setting was ignored.",
   }));
-}
-
-/**
- * Bridge usage to the V3 contract. The nested token objects must always
- * exist — OpenCode reads `inputTokens.total` directly, so a flat shape or
- * a missing object crashes the turn with "undefined is not an object".
- * Totals stay undefined when unobserved (synthetic turns bill nothing);
- * only the containers are guaranteed.
- */
-function resultUsage(usage: FlatMuseUsage | undefined): LanguageModelV3Usage {
-  return {
-    inputTokens: {
-      total: usage?.inputTokens,
-      noCache: undefined,
-      cacheRead: undefined,
-      cacheWrite: undefined,
-    },
-    outputTokens: {
-      total: usage?.outputTokens,
-      text: undefined,
-      reasoning: usage?.reasoningTokens,
-    },
-  };
 }
 
 function requestKindFromHeaders(options: LanguageModelV3CallOptions): string | undefined {
