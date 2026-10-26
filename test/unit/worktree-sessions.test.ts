@@ -52,6 +52,7 @@ function context(sessionID: string, directory: string): RequestContext {
 interface FakeHost {
   calls: Array<{ method: string; params: Record<string, unknown> }>;
   failWorktreeWith?: string;
+  failPlainStartWith?: string;
   listEntries?: Array<{ path: string; branch?: string; isMain?: boolean; sessionIds?: string[] }>;
 }
 
@@ -86,6 +87,9 @@ function managerAt(root: string, fake: FakeHost, experimentalApi: boolean | unde
           if (method === "session/start") {
             if ((params as { worktree?: unknown }).worktree && fake.failWorktreeWith) {
               throw new MspCommandRejectedError(method, -32029, fake.failWorktreeWith);
+            }
+            if (!(params as { worktree?: unknown }).worktree && fake.failPlainStartWith) {
+              throw new MspCommandRejectedError(method, -32602, fake.failPlainStartWith);
             }
             const n = calls.filter((c) => c.method === "session/start").length;
             return { session: { sessionId: `ses_muse_${n}`, activeTurnId: null }, viewCursor: "head-1" };
@@ -147,14 +151,36 @@ describe("post-v1 worktree sessions (#34)", () => {
     await manager.close();
   });
 
-  test("worktree.unexpectedRejectionThrowsWithoutRetry", async () => {
+  test("worktree.unexpectedRejectionRetriesWithoutWorktree", async () => {
+    // Non-git checkouts, Subversion/Mercurial/plain directories, and
+    // untrusted workspaces surface under server-chosen kinds (e.g. the
+    // invalidParams seen on a fresh workspace): retry once without the
+    // worktree parameter and fall back with notice when that succeeds.
     const root = tempRoot();
     const directory = join(root, "project");
     mkdirSync(directory);
-    const fake: FakeHost = { calls: [], failWorktreeWith: "invalidParams" };
+    const fake: FakeHost = { calls: [], failWorktreeWith: "invalidParams", listEntries: [] };
     const { manager, calls } = managerAt(root, fake, true, fakeVcs());
-    await expect(manager.resolveSession(context("ses_oc_1", directory))).rejects.toThrow();
-    expect(calls.filter((c) => c.method === "session/start")).toHaveLength(1);
+    const session = await manager.resolveSession(context("ses_oc_1", directory));
+
+    const starts = calls.filter((c) => c.method === "session/start");
+    expect(starts).toHaveLength(2);
+    expect(starts[0]!.params).toMatchObject({ worktree: { mode: "create" } });
+    expect(starts[1]!.params).not.toHaveProperty("worktree");
+    expect(starts[1]!.params.commandId).not.toBe(starts[0]!.params.commandId);
+    expect(session.worktree).toBeUndefined();
+    expect(session.sessionNotices?.join("\n")).toContain("single-writer lock");
+    await manager.close();
+  });
+
+  test("worktree.doubleRejectionThrowsTheRetryError", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const fake: FakeHost = { calls: [], failWorktreeWith: "invalidParams", failPlainStartWith: "invalidParams" };
+    const { manager, calls } = managerAt(root, fake, true, fakeVcs());
+    await expect(manager.resolveSession(context("ses_oc_1", directory))).rejects.toThrow("invalidParams");
+    expect(calls.filter((c) => c.method === "session/start")).toHaveLength(2);
     await manager.close();
   });
 

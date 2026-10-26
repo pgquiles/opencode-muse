@@ -17,7 +17,12 @@ export interface ManagedWorktree {
   baseSha?: string;
 }
 
-/** Rejection kinds that mean "no worktree path", never a defect. */
+/**
+ * Rejection kinds known to mean "no worktree path", never a defect. The
+ * session manager retries any other explicit rejection once without the
+ * worktree parameter (non-git checkouts and untrusted workspaces surface
+ * under server-chosen kinds), so this set only documents the taxonomy.
+ */
 const WORKTREE_FALLBACK_KINDS = new Set(["experimentalRequired", "capabilityRequired", "workspaceNotTrusted"]);
 
 const FALLBACK_PHRASES: Record<string, string> = {

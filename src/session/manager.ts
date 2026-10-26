@@ -25,7 +25,6 @@ import {
   countSharedSessions,
   defaultWorktreeVcs,
   findOwnWorktree,
-  isWorktreeUnsupportedRejection,
   purgeWorktreeIfEmpty,
   type ManagedWorktree,
   type WorktreeVcs,
@@ -258,14 +257,22 @@ export class MuseSessionManager {
           try {
             start = await host.command("session/start", { ...startParams, worktree: { mode: "create" } });
           } catch (error) {
-            if (!isWorktreeUnsupportedRejection(error)) throw error;
+            // A rejected worktree-bearing start is retried once without the
+            // worktree parameter: non-git checkouts, Subversion/Mercurial and
+            // plain directories, and untrusted workspaces all surface under
+            // server-chosen rejection kinds we cannot enumerate. Only an
+            // explicit rejection retries (a timeout/transport failure must
+            // never risk creating the session twice). When the plain start
+            // succeeds the worktree parameter was the problem: fall back to
+            // the single-writer lock with notice. Its own failure propagates.
+            if (!(error instanceof MspCommandRejectedError)) throw error;
             // A changed payload must never reuse the rejected command's id
             // (the host treats id+payload as the idempotency key).
             start = await host.command("session/start", { ...startParams, commandId: host.mintCommandId() });
             sessionNotices.push(
               ...composeWorktreeNotices({
                 workspaceRoot: canonicalDirectory,
-                fallbackReason: (error as MspCommandRejectedError).mspKind,
+                fallbackReason: error.mspKind,
               }),
             );
           }
