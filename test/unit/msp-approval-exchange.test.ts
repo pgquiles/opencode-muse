@@ -94,4 +94,44 @@ describe("approvals.ApprovalExchange", () => {
     await expect(exchange.requestApproval({} as ApprovalRequestParams)).rejects.toThrow("unroutable-approval-request");
     expect(exchange.pendingApprovalIds()).toEqual([]);
   });
+
+  test("wire object requirement ids park under a canonical stage key", async () => {
+    // The MSP wire sends currentRequirementId as { approvalId, sourceIndex },
+    // never a string: a real approval/request must park, not drop.
+    const exchange = new ApprovalExchange({ timeoutMs: 50 });
+    const wire = request({
+      currentRequirementId: { approvalId: "approval-1", sourceIndex: 0 },
+      availableChoices: [{ choiceId: "allow-once", decision: "approve", label: "Allow once", scope: "once" }],
+    });
+    let settled = false;
+    const pending = exchange.requestApproval(wire);
+    void pending.then(() => { settled = true; });
+    expect(exchange.pendingApprovalIds()).toEqual(["approval-1"]);
+    expect(settled).toBe(false);
+    const described = exchange.describePending();
+    expect(described).toHaveLength(1);
+    expect(described[0]?.requirementId).toBe("approval-1:0");
+    expect(described[0]?.choices).toEqual([{ choiceId: "allow-once", label: "Allow once", scope: "once" }]);
+    expect(exchange.settle("approval-1", true)).toBe(true);
+    const verdict = await pending;
+    expect(verdict).toMatchObject({ approved: true });
+    expect(settled).toBe(true);
+  });
+
+  test("distinct wire stages park alongside each other", async () => {
+    const exchange = new ApprovalExchange({ timeoutMs: 50 });
+    const first = exchange.requestApproval(request({
+      currentRequirementId: { approvalId: "approval-1", sourceIndex: 0 },
+    }));
+    const second = exchange.requestApproval(request({
+      currentRequirementId: { approvalId: "approval-1", sourceIndex: 1 },
+    }));
+    expect(second).not.toBe(first);
+    // describePending reports the latest stage per approval.
+    expect(exchange.describePending().map((entry) => entry.requirementId))
+      .toEqual(["approval-1:1"]);
+    exchange.settle("approval-1", true);
+    await first;
+    await second;
+  });
 });

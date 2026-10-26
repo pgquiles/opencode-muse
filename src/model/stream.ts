@@ -6,6 +6,7 @@ import {
 import type { MspNotification } from "../msp/client.js";
 import { notificationCursorKey } from "../msp/notification.js";
 import {
+  approvalStageKey,
   renderConversationalApprovalPrompt,
   type ConversationalChoice,
 } from "../msp/approvals.js";
@@ -135,7 +136,10 @@ export class MuseStreamMapper {
     const approvalId = params.approvalId;
     const toolCallId = params.toolCallId;
     if (typeof approvalId !== "string" || typeof toolCallId !== "string") return [];
-    const requirementId = typeof params.currentRequirementId === "string" ? params.currentRequirementId : "";
+    // The notification carries the wire requirement object; resolve it to
+    // the same canonical stage key the exchange parked, or the lookup
+    // misses and every real approval renders the choiceless notice.
+    const requirementId = approvalStageKey(approvalId, params.currentRequirementId) ?? "";
     const stageKey = `${approvalId} ${requirementId}`;
     if (this.emittedApprovals.has(stageKey)) return [];
     this.emittedApprovals.add(stageKey);

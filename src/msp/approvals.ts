@@ -37,14 +37,43 @@ function singleChoiceId(choices: readonly ValidApprovalChoice[]): string | null 
  * @returns The selected `choiceId`, or null when no single safe choice fits.
  *   Null means the caller must fail closed (deny with a fresh-session hint).
  */
+/**
+ * One requirement of an approval. The MSP wire sends
+ * `currentRequirementId` as this object (never a string); legacy string
+ * ids are still accepted and attributed to requirement 0 of the approval.
+ */
+export interface ApprovalRequirementId {
+  approvalId: string;
+  sourceIndex: number;
+}
+
 export interface ApprovalRequestParams {
   approvalId: string;
-  currentRequirementId: string;
+  currentRequirementId: string | ApprovalRequirementId;
   availableChoices: readonly unknown[];
   sessionId: string;
   turnId: string;
   toolCallId: string;
   toolName?: string;
+}
+
+/**
+ * Canonical stage key shared by parking, lookup, and dedup. The wire
+ * object and a legacy string for the same stage resolve identically, so a
+ * notification always finds the parked request it announces.
+ */
+export function approvalStageKey(approvalId: string, requirementId: unknown): string | null {
+  if (typeof requirementId === "object" && requirementId !== null) {
+    const ref = requirementId as Record<string, unknown>;
+    if (typeof ref.approvalId === "string" && typeof ref.sourceIndex === "number") {
+      return `${ref.approvalId}:${ref.sourceIndex}`;
+    }
+    return null;
+  }
+  if (typeof requirementId === "string" && requirementId !== "") {
+    return `${approvalId}:${requirementId}`;
+  }
+  return null;
 }
 
 export type ApprovalVerdict =
@@ -57,14 +86,14 @@ function asApprovalRequestParams(value: unknown): ApprovalRequestParams | null {
   if (typeof value !== "object" || value === null) return null;
   const params = value as Record<string, unknown>;
   if (typeof params.approvalId !== "string") return null;
-  if (typeof params.currentRequirementId !== "string") return null;
+  if (approvalStageKey(params.approvalId, params.currentRequirementId) === null) return null;
   if (!Array.isArray(params.availableChoices)) return null;
   if (typeof params.sessionId !== "string") return null;
   if (typeof params.turnId !== "string") return null;
   if (typeof params.toolCallId !== "string") return null;
   return {
     approvalId: params.approvalId,
-    currentRequirementId: params.currentRequirementId,
+    currentRequirementId: params.currentRequirementId as string | ApprovalRequirementId,
     availableChoices: params.availableChoices,
     sessionId: params.sessionId,
     turnId: params.turnId,
@@ -216,27 +245,28 @@ export class ApprovalExchange {
   requestApproval(params: unknown): Promise<ApprovalVerdict> {
     const parsed = asApprovalRequestParams(params);
     if (parsed === null) return Promise.reject(new Error("unroutable-approval-request"));
-    const stageKey = `${parsed.approvalId} ${parsed.currentRequirementId}`;
+    // Validated above: the key always resolves.
+    const stageKey = approvalStageKey(parsed.approvalId, parsed.currentRequirementId)!;
     if (this.decided.has(stageKey)) {
       return Promise.resolve({ alreadyDecided: true as const, params: parsed });
     }
     const existing = this.pending.get(parsed.approvalId);
     if (existing) {
-      const staged = existing.stages.get(parsed.currentRequirementId);
+      const staged = existing.stages.get(stageKey);
       if (staged) {
         staged.params = parsed;
         return staged.promise;
       }
       let resolveStage!: (verdict: ApprovalVerdict) => void;
       const promise = new Promise<ApprovalVerdict>((resolve) => { resolveStage = resolve; });
-      existing.stages.set(parsed.currentRequirementId, { params: parsed, resolve: resolveStage, promise });
+      existing.stages.set(stageKey, { params: parsed, resolve: resolveStage, promise });
       return promise;
     }
     let resolveStage!: (verdict: ApprovalVerdict) => void;
     const promise = new Promise<ApprovalVerdict>((resolve) => { resolveStage = resolve; });
     const pending: PendingApproval = {
       approvalId: parsed.approvalId,
-      stages: new Map([[parsed.currentRequirementId, { params: parsed, resolve: resolveStage, promise }]]),
+      stages: new Map([[stageKey, { params: parsed, resolve: resolveStage, promise }]]),
       timer: undefined,
     };
     pending.timer = setTimeout(() => this.timeOut(parsed.approvalId), this.options.timeoutMs);
@@ -296,11 +326,13 @@ export class ApprovalExchange {
       turnId: string;
     }> = [];
     for (const pending of this.pending.values()) {
-      const requirementIds = [...pending.stages.keys()];
-      const latest = pending.stages.get(requirementIds[requirementIds.length - 1]!)!;
+      // Stage map keys are canonical stage keys; the latest stage wins.
+      const stageKeys = [...pending.stages.keys()];
+      const latestKey = stageKeys[stageKeys.length - 1]!;
+      const latest = pending.stages.get(latestKey)!;
       described.push({
         approvalId: pending.approvalId,
-        requirementId: latest.params.currentRequirementId,
+        requirementId: latestKey,
         choices: conversationalChoices(latest.params.availableChoices),
         ...(typeof latest.params.toolName === "string" ? { toolName: latest.params.toolName } : {}),
         turnId: latest.params.turnId,
@@ -309,8 +341,9 @@ export class ApprovalExchange {
     return described;
   }
 
-  markDecided(approvalId: string, requirementId: string): void {
-    this.decided.add(`${approvalId} ${requirementId}`);
+  markDecided(approvalId: string, requirementId: unknown): void {
+    const key = approvalStageKey(approvalId, requirementId);
+    if (key !== null) this.decided.add(key);
     this.clear(approvalId);
   }
 

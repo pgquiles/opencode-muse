@@ -217,6 +217,33 @@ describe("Muse → LanguageModelV3 stream mapping", () => {
     expect((parts[3] as { finishReason: { unified: string } }).finishReason).toMatchObject({ unified: "stop" });
   });
 
+  test("stream.linksWireRequirementObjectsToParkedChoices", () => {
+    // The notification carries currentRequirementId as the wire object; the
+    // mapper must resolve it to the same canonical stage key the exchange
+    // parked, or every real approval renders the choiceless notice.
+    const seen: Array<{ approvalId: string; requirementId: string }> = [];
+    const mapper = new MuseStreamMapper("turn-1", new Set(), (approvalId, requirementId) => {
+      seen.push({ approvalId, requirementId });
+      return requirementId === "approval-1:0"
+        ? {
+          choices: [{ choiceId: "allow-once", label: "Allow once", scope: "once" }],
+          toolName: "network",
+        }
+        : undefined;
+    });
+    const parts = mapper.accept(event("approval/requested", {
+      sessionId: "ses-1",
+      approvalId: "approval-1",
+      currentRequirementId: { approvalId: "approval-1", sourceIndex: 0 },
+      toolCallId: "call-1",
+      toolName: "network",
+    }));
+    expect(seen).toEqual([{ approvalId: "approval-1", requirementId: "approval-1:0" }]);
+    const delta = (parts[1] as { delta: string }).delta;
+    expect(delta).toContain("A. Allow once (once)");
+    expect(delta).not.toContain("no presentable options");
+  });
+
   test("stream.fallsBackToTheNotificationToolNameWithoutACatalogLookup", () => {
     const mapper = new MuseStreamMapper("turn-1");
     const parts = mapper.accept(event("approval/requested", {
