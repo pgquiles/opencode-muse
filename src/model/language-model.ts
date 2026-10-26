@@ -2,6 +2,7 @@ import type {
   LanguageModelV3,
   LanguageModelV3CallOptions,
   LanguageModelV3StreamPart,
+  LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 import { createHash } from "node:crypto";
 import { MspCommandRejectedError, MuseBridgeError, MuseTranscriptDivergedError, MuseUnsupportedInputError, MuseUnsupportedRequestError, MspProtocolError, MspTransportError } from "../errors.js";
@@ -13,7 +14,7 @@ import { promptContainsCompactionFingerprint } from "../session/fingerprint.js";
 import {
   extractApprovalResponses,
   extractTurnInput,
-  newUserText,
+  latestUserText,
   validateModelOptions,
   type ApprovalResponse,
   type ContextFragment,
@@ -508,12 +509,26 @@ function ignoredOptionWarnings(ignoredOptions: readonly string[]): Array<Record<
   }));
 }
 
-function resultUsage(usage: FlatMuseUsage | undefined): Record<string, unknown> {
+/**
+ * Bridge usage to the V3 contract. The nested token objects must always
+ * exist — OpenCode reads `inputTokens.total` directly, so a flat shape or
+ * a missing object crashes the turn with "undefined is not an object".
+ * Totals stay undefined when unobserved (synthetic turns bill nothing);
+ * only the containers are guaranteed.
+ */
+function resultUsage(usage: FlatMuseUsage | undefined): LanguageModelV3Usage {
   return {
-    inputTokens: usage?.inputTokens,
-    outputTokens: usage?.outputTokens,
-    totalTokens: usage?.totalTokens,
-    reasoningTokens: usage?.reasoningTokens,
+    inputTokens: {
+      total: usage?.inputTokens,
+      noCache: undefined,
+      cacheRead: undefined,
+      cacheWrite: undefined,
+    },
+    outputTokens: {
+      total: usage?.outputTokens,
+      text: undefined,
+      reasoning: usage?.reasoningTokens,
+    },
   };
 }
 
@@ -605,7 +620,7 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     // The peek is text-only (no transcription/staging yet): media-only
     // replies peek as "" and stay on today's post-resolve path.
     const peekPrints = runtime.previousTranscriptFingerprints?.(context.sessionID) ?? [];
-    const peekText = approvalResponses.length === 0 ? newUserText(options.prompt, peekPrints) : "";
+    const peekText = approvalResponses.length === 0 ? latestUserText(options.prompt, peekPrints) : "";
     const peekOutcome = peekText !== ""
       ? await runtime.consumeConversationalVerdict?.(context.sessionID, peekText)
         ?? await runtime.consumeConversationalAnswer?.(context.sessionID, peekText)

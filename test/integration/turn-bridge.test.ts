@@ -100,7 +100,10 @@ describe("fake MSP ↔ LanguageModelV3 bridge integration", () => {
 
     expect(result.content).toEqual([{ type: "text", text: "Muse answer" }]);
     expect(result.finishReason).toMatchObject({ unified: "stop" });
-    expect(result.usage).toMatchObject({ inputTokens: 8, outputTokens: 2, totalTokens: 10, reasoningTokens: 0 });
+    expect(result.usage).toMatchObject({
+      inputTokens: { total: 8, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+      outputTokens: { total: 2, text: undefined, reasoning: 0 },
+    });
     expect(transport.requests.filter((request) => request.method === "turn/start")).toHaveLength(1);
     expect(transport.requests.some((request) => request.method === "view/subscribe")).toBe(false);
     expect(transport.requests.some((request) => request.method === "approval/decide")).toBe(false);

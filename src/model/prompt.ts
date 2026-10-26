@@ -224,26 +224,31 @@ function sliceNewMessages(
 }
 
 /**
- * User text of the not-yet-seen messages, text parts only. The verdict peek
- * runs before the session resolves (so a verdict can reattach without
- * fighting the parked turn's workspace lease), where transcription and
- * staging are unavailable — media-only replies peek as "" and stay on the
- * normal path. Returns "" when nothing new was said.
+ * Text of the latest not-yet-seen user message, text parts only. A parked
+ * turn never advances fingerprints, so its consumed input is still "new"
+ * on the next prompt — joining everything would resend stale text (e.g. an
+ * earlier "yes" ahead of the fresh "B"). The verdict peek runs before the
+ * session resolves (so a verdict can reattach without fighting the parked
+ * turn's workspace lease), where transcription and staging are unavailable
+ * — media-only replies peek as "" and stay on the normal path. Returns ""
+ * when nothing new was said.
  */
-export function newUserText(
+export function latestUserText(
   prompt: LanguageModelV3Prompt,
   previousTranscriptFingerprints: readonly string[],
 ): string {
   const sliced = sliceNewMessages(prompt, previousTranscriptFingerprints);
   if (!sliced.ok) return "";
-  const texts: string[] = [];
-  for (const entry of sliced.messages) {
+  for (let index = sliced.messages.length - 1; index >= 0; index -= 1) {
+    const entry = sliced.messages[index]!;
     if (entry.message.role !== "user") continue;
+    const texts: string[] = [];
     for (const part of entry.message.content) {
       if (part.type === "text") texts.push(part.text);
     }
+    return texts.join("\n").trim();
   }
-  return texts.join("\n").trim();
+  return "";
 }
 
 export async function extractTurnInput(

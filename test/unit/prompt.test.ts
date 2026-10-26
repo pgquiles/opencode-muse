@@ -4,7 +4,7 @@ import {
   extractApprovalResponses,
   extractTurnInput,
   fingerprintVisibleTranscript,
-  newUserText,
+  latestUserText,
   validateModelOptions,
   type ContextFragment,
 } from "../../src/model/prompt.js";
@@ -188,19 +188,28 @@ describe("Muse prompt extraction", () => {
   test("prompt.peekSlicesFreshTextLikeExtraction", () => {
     const previous = [userText("old request"), assistantText("old response")] as unknown as LanguageModelV3Prompt;
     const current = [...previous, userText("a")] as unknown as LanguageModelV3Prompt;
-    expect(newUserText(current, fingerprintVisibleTranscript(previous))).toBe("a");
+    expect(latestUserText(current, fingerprintVisibleTranscript(previous))).toBe("a");
+  });
+
+  test("prompt.peekTakesOnlyTheLastUserMessage", () => {
+    // A parked turn never advances fingerprints, so its consumed input is
+    // still "new" on the next prompt: the verdict must be the fresh reply,
+    // not the stale text joined with it.
+    const previous = [userText("fetch it")] as unknown as LanguageModelV3Prompt;
+    const current = [...previous, userText("yes"), assistantText("fetching"), userText("B")] as unknown as LanguageModelV3Prompt;
+    expect(latestUserText(current, fingerprintVisibleTranscript(previous))).toBe("B");
   });
 
   test("prompt.peekFallsBackToTheFinalUserTurnWithoutHistory", () => {
     const prompt = [userText("old prompt"), assistantText("old answer"), userText("approved")] as unknown as LanguageModelV3Prompt;
-    expect(newUserText(prompt, [])).toBe("approved");
+    expect(latestUserText(prompt, [])).toBe("approved");
   });
 
   test("prompt.peekReturnsEmptyWhenNothingNewWasSaid", () => {
     const previous = [userText("old request"), assistantText("old response")] as unknown as LanguageModelV3Prompt;
-    expect(newUserText(previous, fingerprintVisibleTranscript(previous))).toBe("");
+    expect(latestUserText(previous, fingerprintVisibleTranscript(previous))).toBe("");
     const diverged = [userText("edited"), assistantText("old response")] as unknown as LanguageModelV3Prompt;
-    expect(newUserText(diverged, fingerprintVisibleTranscript(previous))).toBe("");
+    expect(latestUserText(diverged, fingerprintVisibleTranscript(previous))).toBe("");
   });
 
   test("prompt.peekSkipsNonTextParts", () => {
@@ -211,7 +220,7 @@ describe("Muse prompt extraction", () => {
         { type: "file", data: "aGVsbG8=", mediaType: "application/pdf" },
       ],
     }] as unknown as LanguageModelV3Prompt;
-    expect(newUserText(prompt, [])).toBe("b");
+    expect(latestUserText(prompt, [])).toBe("b");
   });
 
   test("prompt.ignoresMalformedApprovalResponses", async () => {

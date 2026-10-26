@@ -7,6 +7,7 @@ import type { MuseModelSelection, RequestContext } from "../../src/types.js";
 import type { MspNotification } from "../../src/msp/client.js";
 import { MspCommandRejectedError, MspCommandTimeoutError } from "../../src/errors.js";
 import { fingerprintCompactionOutput } from "../../src/session/fingerprint.js";
+import { fingerprintVisibleTranscript } from "../../src/model/prompt.js";
 
 const modelID = openCodeModelId("tbh", "muse-wonder-1.0");
 const selection: MuseModelSelection = {
@@ -713,7 +714,12 @@ describe("Muse LanguageModelV3 bridge", () => {
 
     expect(result.content).toEqual([]);
     expect(result.finishReason).toMatchObject({ unified: "stop", raw: "completed" });
-    expect(result.usage).toMatchObject({ inputTokens: undefined, outputTokens: undefined, totalTokens: undefined });
+    // The V3 containers always exist (core reads inputTokens.total); only
+    // the totals stay undefined when unobserved.
+    expect(result.usage).toMatchObject({
+      inputTokens: { total: undefined, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+      outputTokens: { total: undefined, text: undefined, reasoning: undefined },
+    });
   });
 
   test("languageModel.mapsMuseTerminalFailureToSafeTypedError", async () => {
@@ -1060,6 +1066,51 @@ describe("Muse LanguageModelV3 bridge", () => {
     expect(calls).toEqual(["consume", "resolve"]);
     expect(fake.consumedVerdicts).toHaveLength(1);
     expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+  });
+
+  test("languageModel.verdictUsesOnlyTheLatestUserMessage", async () => {
+    // A parked turn never advances fingerprints, so its consumed input is
+    // still "new" on the next prompt: replying "B" after an earlier "yes"
+    // must consume "B", not "yes\nB".
+    const userMessage = (text: string) => ({ role: "user", content: [{ type: "text", text }] });
+    const assistantMessage = (text: string) => ({ role: "assistant", content: [{ type: "text", text }] });
+    const previous = [userMessage("Fetch https://example.com")];
+    const prompt = [
+      ...previous,
+      userMessage("yes"),
+      assistantMessage("Fetching now."),
+      userMessage("B"),
+    ];
+    const fake = fakeRuntime({
+      events: textEvents(),
+      conversationalVerdict: { text: "Recorded.", settledLast: true },
+    });
+    fake.runtime.previousTranscriptFingerprints = () =>
+      fingerprintVisibleTranscript(previous as never);
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions({ prompt }));
+    for await (const _part of result.stream) { /* drain */ }
+
+    expect(fake.consumedVerdicts).toEqual([{ sessionID: "ses_model_test", text: "B" }]);
+  });
+
+  test("languageModel.syntheticFinishCarriesNestedV3Usage", async () => {
+    const fake = fakeRuntime({
+      events: textEvents(),
+      conversationalVerdict: { text: "I didn't understand — reply A or B.", settledLast: false },
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const parts: Array<Record<string, unknown>> = [];
+    for await (const part of result.stream) parts.push(part as unknown as Record<string, unknown>);
+
+    const finish = parts.find((part) => part.type === "finish");
+    expect(finish).toMatchObject({
+      usage: {
+        inputTokens: { total: undefined, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+        outputTokens: { total: undefined, text: undefined, reasoning: undefined },
+      },
+    });
   });
 
   test("languageModel.verdictsTakePriorityOverAnswers", async () => {
