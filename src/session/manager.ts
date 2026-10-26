@@ -12,6 +12,12 @@ import {
   type ConversationalChoice,
 } from "../msp/approvals.js";
 import {
+  describeRecoveryBlock,
+  matchRecoveryDecision,
+  renderRecoveryPrompt,
+  type RecoveryBlock,
+} from "./recovery.js";
+import {
   isMultiSelectQuestion,
   matchConversationalChoice as matchUserInputChoice,
   presentableQuestion,
@@ -181,7 +187,10 @@ export class MuseSessionManager {
     try {
       const stored = await this.options.registry.get(context.sessionID, fingerprint);
       if (stored && (Object.keys(stored.pendingCommands).length > 0 || stored.activeTurnId !== undefined)) {
-        throw new MuseRecoveryChoiceRequiredError();
+        const block = describeRecoveryBlock(stored);
+        throw new MuseRecoveryChoiceRequiredError(
+          block ? this.recoveryRefusalText(block) : "stuck turn with no recorded detail",
+        );
       }
 
       if (existingBinding) {
@@ -547,6 +556,65 @@ export class MuseSessionManager {
    */
   previousTranscriptFingerprints(openCodeSessionId: string): readonly string[] | undefined {
     return this.bindings.get(openCodeSessionId)?.previousTranscriptFingerprints;
+  }
+
+  /**
+   * Interpret a user message as the recovery decision for a poisoned
+   * registry entry. Returns null when the entry is clean or missing, or
+   * when a live binding still holds parked approvals/questions — the
+   * verdict flow owns that case, not recovery. Abandon deletes the stuck
+   * entry and its Muse linkage and drops any idle in-memory binding, so
+   * the next resolve starts fresh; anything else leaves the entry
+   * untouched and re-presents the choice via the enriched error. Only an
+   * exact abandon form clears — ambiguity never abandons.
+   */
+  async consumeRecoveryDecision(
+    openCodeSessionId: string,
+    text: string,
+    directory: string,
+  ): Promise<{ text: string; abandoned: boolean } | null> {
+    const fingerprint = workspaceFingerprint(canonicalWorkspacePath(directory));
+    const stored = await this.options.registry.get(openCodeSessionId, fingerprint);
+    if (!stored) return null;
+    const block = describeRecoveryBlock(stored);
+    if (!block) return null;
+    const binding = this.bindings.get(openCodeSessionId);
+    if (binding && (binding.host.approvals.pendingApprovalIds().length > 0
+      || binding.host.userInput.describePending().length > 0)) {
+      return null;
+    }
+    if (matchRecoveryDecision(text) !== true) {
+      return { text: this.recoveryRefusalText(block), abandoned: false };
+    }
+    await this.options.registry.deleteEntry(openCodeSessionId, fingerprint);
+    if (binding) {
+      this.bindings.delete(openCodeSessionId);
+      try {
+        await binding.host.close?.();
+      } catch {
+        // Best-effort orphan cleanup; the entry is already gone, so the
+        // next resolve starts fresh regardless.
+      }
+      try {
+        await binding.lease?.release();
+      } catch {
+        // A leaked lease from the dead turn must not block the restart.
+      }
+    }
+    return {
+      text: `Abandoned the stuck ${block.method} turn — the Muse session link was dropped. Re-prompt to try again. (If the stuck turn actually ran elsewhere, its effects still apply.)`,
+      abandoned: true,
+    };
+  }
+
+  /** Layer-1 facts for the recovery error: method, age, and Muse session. */
+  private recoveryDetails(block: RecoveryBlock): string {
+    return `${block.method} from ${block.ageMs}ms ago on Muse session ${block.museSessionId}; reply A to abandon and restart fresh`;
+  }
+
+  /** Full refusal body: facts plus the choice, so the error itself is the offer. */
+  private recoveryRefusalText(block: RecoveryBlock): string {
+    return `${this.recoveryDetails(block)}\n\n${renderRecoveryPrompt(block)}`;
   }
 
   /** Latest offered choices for one pending approval, for prompt rendering. */

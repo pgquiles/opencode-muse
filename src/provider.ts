@@ -148,6 +148,7 @@ export async function createProviderPlugin(
         },
         resolveSession: (context, options) => sessions.resolveSession(context, options),
         previousTranscriptFingerprints: (sessionID) => sessions.previousTranscriptFingerprints(sessionID),
+        consumeRecoveryDecision: (sessionID, text, directory) => sessions.consumeRecoveryDecision(sessionID, text, directory),
         settleApprovalResponses: (sessionID, responses) => sessions.settleApprovalResponses(sessionID, responses),
         hasParkedApprovals: (sessionID) => sessions.hasParkedApprovals(sessionID),
         disarmParkedJoin: (sessionID) => sessions.disarmParkedJoin(sessionID),

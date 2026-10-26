@@ -577,6 +577,58 @@ describe("MuseSessionManager", () => {
     await manager.close();
   });
 
+  test("sessionManager.keepLeavesThePoisonedEntryUntouched", async () => {
+    const root = tempRoot();
+    const { manager } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    await first.release?.();
+
+    const kept = await manager.consumeRecoveryDecision("ses_oc_1", "B", directory);
+    expect(kept).toMatchObject({ abandoned: false });
+    expect(kept?.text).toContain("Abandon");
+    // The entry still blocks: a direct resolve still fails closed.
+    await expect(manager.resolveSession(context("ses_oc_1", directory)))
+      .rejects.toBeInstanceOf(MuseRecoveryChoiceRequiredError);
+    await manager.close();
+  });
+
+  test("sessionManager.abandonDeletesThePoisonedEntry", async () => {
+    const root = tempRoot();
+    const { manager, calls } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    await first.release?.();
+
+    const abandoned = await manager.consumeRecoveryDecision("ses_oc_1", "A", directory);
+    expect(abandoned).toMatchObject({ abandoned: true });
+    expect(abandoned?.text).toContain("Re-prompt");
+    const stored = await new SessionRegistry({ stateDirectory: root })
+      .get("ses_oc_1", workspaceFingerprint(directory));
+    expect(stored).toBeUndefined();
+    // A follow-up resolves cleanly and starts a fresh session.
+    const second = await manager.resolveSession(context("ses_oc_1", directory));
+    expect(second.sessionId).not.toBe(first.sessionId);
+    expect(calls.filter((call) => call.method === "session/start")).toHaveLength(2);
+    await manager.close();
+  });
+
+  test("sessionManager.recoveryDecideIgnoresCleanSessions", async () => {
+    const root = tempRoot();
+    const { manager } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    await manager.resolveSession(context("ses_oc_1", directory));
+
+    expect(await manager.consumeRecoveryDecision("ses_oc_1", "A", directory)).toBeNull();
+    expect(await manager.consumeRecoveryDecision("unknown", "A", directory)).toBeNull();
+    await manager.close();
+  });
+
   test("sessionManager.deliversStaleVerdictsForDeadTurnsWithoutArmingJoin", async () => {
     const root = tempRoot();
     const { manager, exchanges } = managerAt(root);

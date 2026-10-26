@@ -191,8 +191,14 @@ export class MuseUnsupportedInputError extends MuseBridgeError {
 }
 
 export class MuseRecoveryChoiceRequiredError extends MuseBridgeError {
-  constructor() {
-    super("MUSE_RECOVERY_CHOICE_REQUIRED", "A prior Muse command has an unknown outcome; inspect or resume the session before continuing", false);
+  constructor(details?: string) {
+    super(
+      "MUSE_RECOVERY_CHOICE_REQUIRED",
+      details
+        ? `A prior Muse command has an unknown outcome (${details}); reply with the offered recovery choice instead of re-prompting`
+        : "A prior Muse command has an unknown outcome; inspect or resume the session before continuing",
+      false,
+    );
     this.name = "MuseRecoveryChoiceRequiredError";
   }
 }

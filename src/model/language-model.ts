@@ -5,7 +5,7 @@ import type {
   LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 import { createHash } from "node:crypto";
-import { MspCommandRejectedError, MuseBridgeError, MuseTranscriptDivergedError, MuseUnsupportedInputError, MuseUnsupportedRequestError, MspProtocolError, MspTransportError } from "../errors.js";
+import { MspCommandRejectedError, MuseBridgeError, MuseRecoveryChoiceRequiredError, MuseTranscriptDivergedError, MuseUnsupportedInputError, MuseUnsupportedRequestError, MspProtocolError, MspTransportError } from "../errors.js";
 import type { MspNotification } from "../msp/client.js";
 import { notificationCursorKey } from "../msp/notification.js";
 import { MUSE_CONTEXT_HEADERS, readRequestContext } from "./context.js";
@@ -79,6 +79,16 @@ export interface MuseLanguageRuntime {
   resolveSession(context: RequestContext, options?: { verdictConsumed?: boolean }): Promise<MuseTurnSession>;
   videoChunkBytes?: number;
   settleApprovalResponses?(sessionID: string, responses: ApprovalResponse[]): Promise<string[]>;
+  /**
+   * Interpret a message as the recovery decision for a poisoned registry
+   * entry. Returns null when the entry is clean (normal turn flow).
+   * Abandon deletes the stuck entry; anything else leaves it and the
+   * caller surfaces the enriched error carrying the choice.
+   */
+  consumeRecoveryDecision?(sessionID: string, text: string, directory: string): Promise<{
+    text: string;
+    abandoned: boolean;
+  } | null>;
   /**
    * Fingerprints the bridge has already forwarded for this OpenCode
    * session. Lets the verdict peek slice the prompt to fresh user text
@@ -621,6 +631,17 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     // replies peek as "" and stay on today's post-resolve path.
     const peekPrints = runtime.previousTranscriptFingerprints?.(context.sessionID) ?? [];
     const peekText = approvalResponses.length === 0 ? latestUserText(options.prompt, peekPrints) : "";
+    // Recovery first: a poisoned entry means no live binding (and no parked
+    // approvals) can exist, so its decision precedes the verdict peek.
+    // Abandon clears the entry and the turn below runs clean; anything else
+    // throws the enriched error, whose message carries the choice.
+    const recovery = approvalResponses.length === 0
+      ? await runtime.consumeRecoveryDecision?.(context.sessionID, peekText, context.directory)
+      : null;
+    if (recovery && !recovery.abandoned) {
+      throw new MuseRecoveryChoiceRequiredError(recovery.text);
+    }
+    const recoveryAbandoned = recovery?.abandoned === true;
     const peekOutcome = peekText !== ""
       ? await runtime.consumeConversationalVerdict?.(context.sessionID, peekText)
         ?? await runtime.consumeConversationalAnswer?.(context.sessionID, peekText)
@@ -709,6 +730,13 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
       // attached: it resumes the turn. Re-asks, queued items, and
       // dead turns end synthetically with the outcome text.
       syntheticOnly = !outcome.settledLast || session.joinParkedTurnId === undefined;
+    }
+    if (recoveryAbandoned && recovery) {
+      // The stuck entry is gone and the session below is fresh, but the
+      // abandon message itself ("A") is not a turn: confirm synthetically
+      // and let the user re-prompt.
+      initialText = recovery.text;
+      syntheticOnly = true;
     }
     let execution: MuseTurnExecution;
     try {

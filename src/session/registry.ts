@@ -380,6 +380,21 @@ export class SessionRegistry {
     this.write({ ...entry, pendingCommands, updatedAt: this.now() });
   }
 
+  /**
+   * Drop the whole entry: the stuck turn is abandoned and the Muse linkage
+   * with it, so the next resolve starts a fresh session. A missing entry is
+   * already the desired end state.
+   */
+  async deleteEntry(openCodeSessionId: string, workspaceFingerprint: string): Promise<void> {
+    const entry = await this.get(openCodeSessionId, workspaceFingerprint);
+    if (!entry) return;
+    try {
+      unlinkSync(this.entryPath(openCodeSessionId));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new RegistryStorageError();
+    }
+  }
+
   private async requireEntry(openCodeSessionId: string, workspaceFingerprint: string): Promise<SessionRegistryEntry> {
     const entry = await this.get(openCodeSessionId, workspaceFingerprint);
     if (!entry) throw new RegistryValidationError();

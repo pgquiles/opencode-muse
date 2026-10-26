@@ -16,6 +16,7 @@ import "./integration/provider-registration.test.ts";
 import "./unit/request-context.test.ts";
 import "./unit/agent-context.test.ts";
 import "./unit/prompt.test.ts";
+import "./unit/recovery.test.ts";
 import "./unit/audio-transcribe.test.ts";
 import "./unit/pdf-staging.test.ts";
 import "./unit/worktree-sessions.test.ts";

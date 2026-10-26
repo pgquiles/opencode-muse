@@ -1113,6 +1113,40 @@ describe("Muse LanguageModelV3 bridge", () => {
     });
   });
 
+  test("languageModel.recoveryKeepThrowsAReadableErrorWithoutResolving", async () => {
+    const fake = fakeRuntime({ events: textEvents() });
+    const calls: string[] = [];
+    const baseResolve = fake.runtime.resolveSession;
+    fake.runtime.resolveSession = async (context) => { calls.push("resolve"); return baseResolve(context); };
+    fake.runtime.consumeRecoveryDecision = async () => ({
+      text: "turn/start from 60s ago\n\nA. Abandon the stuck turn and restart fresh",
+      abandoned: false,
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const error = await model.doStream(callOptions()).then(() => null, (reason: unknown) => reason as Error);
+
+    expect(error?.name).toBe("MuseRecoveryChoiceRequiredError");
+    expect(error?.message).toContain("Abandon");
+    expect(calls).toEqual([]);
+    expect(fake.consumedVerdicts).toEqual([]);
+  });
+
+  test("languageModel.recoveryAbandonClearsAndConfirmsSynthetically", async () => {
+    const fake = fakeRuntime({ events: textEvents() });
+    fake.runtime.consumeRecoveryDecision = async () => ({
+      text: "Abandoned the stuck turn — re-prompt to try again.",
+      abandoned: true,
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const parts: Array<Record<string, unknown>> = [];
+    for await (const part of result.stream) parts.push(part as unknown as Record<string, unknown>);
+
+    expect(parts.map((part) => part.type)).toEqual(["stream-start", "text-start", "text-delta", "text-end", "finish"]);
+    expect((parts[2] as { delta: string }).delta).toContain("Abandoned the stuck turn");
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+  });
+
   test("languageModel.verdictsTakePriorityOverAnswers", async () => {
     const fake = fakeRuntime({
       events: textEvents("turn-parked"),
