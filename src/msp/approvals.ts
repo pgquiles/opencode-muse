@@ -94,7 +94,14 @@ export interface ConversationalChoice {
   scope: string;
 }
 
-/** Keep only choices with a usable verbatim label, in presented order. */
+/**
+ * Keep only choices with a usable verbatim label, in presented order. Some
+ * MSP approvals (notably network requests) offer choices without labels;
+ * when NOTHING is presentable, derive labels from the decision/scope so the
+ * lettered prompt still offers exactly what Muse offered instead of failing
+ * closed with nothing to pick. Choice ids stay verbatim, and matching still
+ * requires an exact letter, number, or name — ambiguity never approves.
+ */
 export function conversationalChoices(availableChoices: readonly unknown[]): ConversationalChoice[] {
   const choices: ConversationalChoice[] = [];
   for (const entry of availableChoices) {
@@ -104,6 +111,22 @@ export function conversationalChoices(availableChoices: readonly unknown[]): Con
     if (typeof candidate.label !== "string" || candidate.label.trim() === "") continue;
     if (typeof candidate.scope !== "string") continue;
     choices.push({ choiceId: candidate.choiceId, label: candidate.label, scope: candidate.scope });
+  }
+  if (choices.length > 0) return choices;
+  for (const entry of availableChoices) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const candidate = entry as Record<string, unknown>;
+    if (typeof candidate.choiceId !== "string") continue;
+    const derived = candidate.decision === "approve"
+      ? "Approve"
+      : candidate.decision === "reject"
+        ? "Deny"
+        : candidate.choiceId;
+    choices.push({
+      choiceId: candidate.choiceId,
+      label: derived,
+      scope: typeof candidate.scope === "string" ? candidate.scope : "",
+    });
   }
   return choices;
 }

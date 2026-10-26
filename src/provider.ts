@@ -146,7 +146,8 @@ export async function createProviderPlugin(
           if (staged.ok) pdfStagingDirs.add(directory);
           return staged;
         },
-        resolveSession: (context) => sessions.resolveSession(context),
+        resolveSession: (context, options) => sessions.resolveSession(context, options),
+        previousTranscriptFingerprints: (sessionID) => sessions.previousTranscriptFingerprints(sessionID),
         settleApprovalResponses: (sessionID, responses) => sessions.settleApprovalResponses(sessionID, responses),
         hasParkedApprovals: (sessionID) => sessions.hasParkedApprovals(sessionID),
         disarmParkedJoin: (sessionID) => sessions.disarmParkedJoin(sessionID),

@@ -466,6 +466,106 @@ describe("MuseSessionManager", () => {
     await manager.close();
   });
 
+  test("sessionManager.resolvesTheFollowUpTurnAfterAnUnmatchedVerdictWithoutReacquiring", async () => {
+    const root = tempRoot();
+    const { manager, calls, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = exchanges[0] as ApprovalExchange;
+    exchange.requestApproval({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      approvalId: "approval-9",
+      currentRequirementId: "req-1",
+      toolCallId: "call-9",
+      toolName: "shell",
+      availableChoices: [
+        { choiceId: "allow-once", decision: "approve", label: "Allow once", scope: "once" },
+        { choiceId: "deny-once", decision: "reject", label: "Deny", scope: "once" },
+      ],
+    });
+
+    // Gibberish matches nothing: the turn ends synthetically with a re-ask,
+    // and the follow-up resolve must reattach without touching the lease
+    // the parked turn still holds. doPrepare passes verdictConsumed because
+    // the peek consumed (a re-ask outcome is still a consumption).
+    const reask = await manager.consumeConversationalVerdict("ses_oc_1", "yes please");
+    expect(reask).toMatchObject({ settledLast: false });
+    expect(first.joinParkedTurnId).toBeUndefined();
+
+    const second = await manager.resolveSession(context("ses_oc_1", directory), { verdictConsumed: true });
+    expect(second).toBe(first);
+    expect(calls.filter((call) => call.method === "session/start")).toHaveLength(1);
+    await manager.close();
+  });
+
+  test("sessionManager.resolvesTheFollowUpTurnAfterAQueuedAnswerWithoutReacquiring", async () => {
+    const root = tempRoot();
+    const { manager, calls, userExchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = userExchanges[0] as UserInputExchange;
+    void exchange.requestUserInput({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      toolCallId: "call-1",
+      itemId: "item-1",
+      viewCursor: "head-1",
+      userInputId: "ui-1",
+      questions: [
+        { id: "q-color", header: "Pick a color", question: "Which color?", options: [{ label: "Blue" }, { label: "Red" }] },
+        { id: "q-size", header: "Pick a size", question: "Which size?", options: [{ label: "Big" }, { label: "Small" }] },
+      ],
+    });
+
+    const queued = await manager.consumeConversationalAnswer("ses_oc_1", "b");
+    expect(queued).toMatchObject({ settledLast: false });
+    expect(first.joinParkedTurnId).toBeUndefined();
+
+    const second = await manager.resolveSession(context("ses_oc_1", directory), { verdictConsumed: true });
+    expect(second).toBe(first);
+    expect(calls.filter((call) => call.method === "session/start")).toHaveLength(1);
+    await manager.close();
+  });
+
+  test("sessionManager.settlesALabellessApprovalByLetterAndReattaches", async () => {
+    const root = tempRoot();
+    const { manager, calls, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = exchanges[0] as ApprovalExchange;
+    exchange.requestApproval({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      approvalId: "approval-9",
+      currentRequirementId: "req-1",
+      toolCallId: "call-9",
+      toolName: "network",
+      availableChoices: [
+        { choiceId: "net-allow", decision: "approve", scope: "once" },
+        { choiceId: "net-deny", decision: "reject", scope: "once" },
+      ],
+    });
+
+    // The user's network case: no usable labels, but "a" still settles the
+    // derived "Approve (once)" choice instead of denying with no options.
+    const outcome = await manager.consumeConversationalVerdict("ses_oc_1", "a");
+    expect(outcome).toMatchObject({ settledLast: true });
+    expect(outcome?.text).toContain("Approve");
+
+    const second = await manager.resolveSession(context("ses_oc_1", directory));
+    expect(second).toBe(first);
+    expect(calls.filter((call) => call.method === "session/start")).toHaveLength(1);
+    expect(first.joinParkedTurnId).toBe("turn-1");
+    await manager.close();
+  });
+
   test("sessionManager.deliversStaleVerdictsForDeadTurnsWithoutArmingJoin", async () => {
     const root = tempRoot();
     const { manager, exchanges } = managerAt(root);
@@ -710,7 +810,10 @@ describe("MuseSessionManager", () => {
       approvalId: "approval-9",
       currentRequirementId: "req-1",
       toolCallId: "call-9",
-      availableChoices: [{ choiceId: "x", decision: "reject", scope: "once" }],
+      // Truly nothing to offer: label-less choices now derive presentable
+      // labels (see settlesALabellessApprovalByLetterAndReattaches), so the
+      // deny path only triggers when no choice can be projected at all.
+      availableChoices: [],
     });
 
     const outcome = await manager.consumeConversationalVerdict("ses_oc_1", "a");

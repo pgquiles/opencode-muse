@@ -1039,6 +1039,29 @@ describe("Muse LanguageModelV3 bridge", () => {
     expect(deltas.join("")).not.toContain("Return the probe answer.");
   });
 
+  test("languageModel.consumesTheVerdictBeforeResolvingTheSession", async () => {
+    const fake = fakeRuntime({
+      events: textEvents("turn-parked"),
+      joinParkedTurnId: "turn-parked",
+      conversationalVerdict: { text: "Recorded: Allow once (once). Resuming…", settledLast: true },
+    });
+    const calls: string[] = [];
+    const baseResolve = fake.runtime.resolveSession;
+    fake.runtime.resolveSession = async (context) => { calls.push("resolve"); return baseResolve(context); };
+    const baseConsume = fake.runtime.consumeConversationalVerdict;
+    fake.runtime.consumeConversationalVerdict = async (sessionID, text) => {
+      calls.push("consume");
+      return baseConsume(sessionID, text);
+    };
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    for await (const _part of result.stream) { /* drain */ }
+
+    expect(calls).toEqual(["consume", "resolve"]);
+    expect(fake.consumedVerdicts).toHaveLength(1);
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+  });
+
   test("languageModel.verdictsTakePriorityOverAnswers", async () => {
     const fake = fakeRuntime({
       events: textEvents("turn-parked"),

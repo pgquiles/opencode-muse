@@ -4,6 +4,7 @@ import {
   extractApprovalResponses,
   extractTurnInput,
   fingerprintVisibleTranscript,
+  newUserText,
   validateModelOptions,
   type ContextFragment,
 } from "../../src/model/prompt.js";
@@ -182,6 +183,35 @@ describe("Muse prompt extraction", () => {
       ],
     }] as unknown as LanguageModelV3Prompt;
     expect(extractApprovalResponses(prompt)).toEqual([{ approvalId: "approval-1", approved: true }]);
+  });
+
+  test("prompt.peekSlicesFreshTextLikeExtraction", () => {
+    const previous = [userText("old request"), assistantText("old response")] as unknown as LanguageModelV3Prompt;
+    const current = [...previous, userText("a")] as unknown as LanguageModelV3Prompt;
+    expect(newUserText(current, fingerprintVisibleTranscript(previous))).toBe("a");
+  });
+
+  test("prompt.peekFallsBackToTheFinalUserTurnWithoutHistory", () => {
+    const prompt = [userText("old prompt"), assistantText("old answer"), userText("approved")] as unknown as LanguageModelV3Prompt;
+    expect(newUserText(prompt, [])).toBe("approved");
+  });
+
+  test("prompt.peekReturnsEmptyWhenNothingNewWasSaid", () => {
+    const previous = [userText("old request"), assistantText("old response")] as unknown as LanguageModelV3Prompt;
+    expect(newUserText(previous, fingerprintVisibleTranscript(previous))).toBe("");
+    const diverged = [userText("edited"), assistantText("old response")] as unknown as LanguageModelV3Prompt;
+    expect(newUserText(diverged, fingerprintVisibleTranscript(previous))).toBe("");
+  });
+
+  test("prompt.peekSkipsNonTextParts", () => {
+    const prompt = [{
+      role: "user",
+      content: [
+        { type: "text", text: "  b  " },
+        { type: "file", data: "aGVsbG8=", mediaType: "application/pdf" },
+      ],
+    }] as unknown as LanguageModelV3Prompt;
+    expect(newUserText(prompt, [])).toBe("b");
   });
 
   test("prompt.ignoresMalformedApprovalResponses", async () => {

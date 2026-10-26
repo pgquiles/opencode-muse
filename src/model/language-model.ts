@@ -13,6 +13,7 @@ import { promptContainsCompactionFingerprint } from "../session/fingerprint.js";
 import {
   extractApprovalResponses,
   extractTurnInput,
+  newUserText,
   validateModelOptions,
   type ApprovalResponse,
   type ContextFragment,
@@ -74,9 +75,16 @@ export interface MuseTurnSession {
 
 export interface MuseLanguageRuntime {
   selectionIndex: ReadonlyMap<string, MuseModelSelection>;
-  resolveSession(context: RequestContext): Promise<MuseTurnSession>;
+  resolveSession(context: RequestContext, options?: { verdictConsumed?: boolean }): Promise<MuseTurnSession>;
   videoChunkBytes?: number;
   settleApprovalResponses?(sessionID: string, responses: ApprovalResponse[]): Promise<string[]>;
+  /**
+   * Fingerprints the bridge has already forwarded for this OpenCode
+   * session. Lets the verdict peek slice the prompt to fresh user text
+   * before resolving (and its workspace lease). Absent behaves as no
+   * history: the peek falls back to the final user turn.
+   */
+  previousTranscriptFingerprints?(sessionID: string): readonly string[] | undefined;
   hasParkedApprovals?(sessionID: string): boolean | Promise<boolean>;
   disarmParkedJoin?(sessionID: string): void;
   consumeConversationalVerdict?(sessionID: string, text: string): Promise<{ text: string; settledLast: boolean } | null>;
@@ -588,7 +596,21 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
         await runtime.settleApprovalResponses(context.sessionID, approvalResponses);
       }
     }
-    const session = await runtime.resolveSession(context);
+    // Conversational verdict peek: try the fresh user text against parked
+    // approvals/questions BEFORE resolving. A live parked turn holds the
+    // workspace lease, so resolving first would either throw the parked
+    // guard or fight the lease (WorkspaceBusyError) before the verdict —
+    // which answers the parked request — is ever consumed. A consumed
+    // verdict reattaches lease-free; anything else resolves normally.
+    // The peek is text-only (no transcription/staging yet): media-only
+    // replies peek as "" and stay on today's post-resolve path.
+    const peekPrints = runtime.previousTranscriptFingerprints?.(context.sessionID) ?? [];
+    const peekText = approvalResponses.length === 0 ? newUserText(options.prompt, peekPrints) : "";
+    const peekOutcome = peekText !== ""
+      ? await runtime.consumeConversationalVerdict?.(context.sessionID, peekText)
+        ?? await runtime.consumeConversationalAnswer?.(context.sessionID, peekText)
+      : null;
+    const session = await runtime.resolveSession(context, peekOutcome ? { verdictConsumed: true } : undefined);
     // Set by the manager when the settled verdicts matched a parked turn.
     const joining = session.joinParkedTurnId !== undefined;
     // The effort tier arrives as the resolved request variant (Ctrl+T,
@@ -655,23 +677,23 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     // user text (and no legacy structured responses), the message answers
     // the oldest pending item instead of starting a turn. Approvals decide
     // first — side effects gate the turn — then questions. Verdict text is
-    // never forwarded to the model.
+    // never forwarded to the model. The pre-resolve peek above already
+    // consumed when the text matched; the post-resolve consume below only
+    // runs when the peek found nothing (e.g. media-only replies), so a
+    // verdict is never consumed twice.
     const verdictText = approvalResponses.length === 0 ? userTextOf(extracted.parts) : "";
     let initialText: string | undefined;
     let syntheticOnly = false;
-    if (verdictText !== "") {
-      const verdict = await runtime.consumeConversationalVerdict?.(context.sessionID, verdictText);
-      const answered = verdict
-        ? null
-        : await runtime.consumeConversationalAnswer?.(context.sessionID, verdictText);
-      const outcome = verdict ?? answered;
-      if (outcome) {
-        initialText = outcome.text;
-        // Join only the final verdict while the parked turn is still
-        // attached: it resumes the turn. Re-asks, queued items, and
-        // dead turns end synthetically with the outcome text.
-        syntheticOnly = !outcome.settledLast || session.joinParkedTurnId === undefined;
-      }
+    const outcome = peekOutcome ?? (verdictText !== ""
+      ? await runtime.consumeConversationalVerdict?.(context.sessionID, verdictText)
+        ?? await runtime.consumeConversationalAnswer?.(context.sessionID, verdictText)
+      : null);
+    if (outcome) {
+      initialText = outcome.text;
+      // Join only the final verdict while the parked turn is still
+      // attached: it resumes the turn. Re-asks, queued items, and
+      // dead turns end synthetically with the outcome text.
+      syntheticOnly = !outcome.settledLast || session.joinParkedTurnId === undefined;
     }
     let execution: MuseTurnExecution;
     try {

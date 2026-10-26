@@ -187,13 +187,15 @@ async function extractFilePart(
   return inputError("unsupported-media", { mediaType: safeMediaType(mediaType) });
 }
 
-export async function extractTurnInput(
+type SlicedMessages =
+  | { ok: true; messages: ReturnType<typeof visibleMessages>; fingerprints: string[] }
+  | { ok: false; reason: "transcript-diverged" | "no-new-user-input" };
+
+/** Shared slicing core: messages not yet covered by previous fingerprints. */
+function sliceNewMessages(
   prompt: LanguageModelV3Prompt,
   previousTranscriptFingerprints: readonly string[],
-  contextAllowlist: readonly ContextFragment[],
-  options: ExtractTurnInputOptions = {},
-): Promise<ExtractTurnInputResult> {
-  if (options.signal?.aborted) return { ok: false, error: inputError("aborted") };
+): SlicedMessages {
   const current = visibleMessages(prompt);
   const currentFingerprints = current.map((entry) => entry.fingerprint);
   let newMessages = current;
@@ -201,7 +203,7 @@ export async function extractTurnInput(
   if (previousTranscriptFingerprints.length > 0) {
     if (previousTranscriptFingerprints.length > currentFingerprints.length
       || previousTranscriptFingerprints.some((fingerprint, index) => currentFingerprints[index] !== fingerprint)) {
-      return { ok: false, error: inputError("transcript-diverged") };
+      return { ok: false, reason: "transcript-diverged" };
     }
     newMessages = current.slice(previousTranscriptFingerprints.length);
   } else {
@@ -215,8 +217,45 @@ export async function extractTurnInput(
     else newMessages = [];
   }
 
-  const currentUserMessages = newMessages.filter((entry) => entry.message.role === "user");
-  if (currentUserMessages.length === 0) return { ok: false, error: inputError("no-new-user-input") };
+  if (!newMessages.some((entry) => entry.message.role === "user")) {
+    return { ok: false, reason: "no-new-user-input" };
+  }
+  return { ok: true, messages: newMessages, fingerprints: currentFingerprints };
+}
+
+/**
+ * User text of the not-yet-seen messages, text parts only. The verdict peek
+ * runs before the session resolves (so a verdict can reattach without
+ * fighting the parked turn's workspace lease), where transcription and
+ * staging are unavailable — media-only replies peek as "" and stay on the
+ * normal path. Returns "" when nothing new was said.
+ */
+export function newUserText(
+  prompt: LanguageModelV3Prompt,
+  previousTranscriptFingerprints: readonly string[],
+): string {
+  const sliced = sliceNewMessages(prompt, previousTranscriptFingerprints);
+  if (!sliced.ok) return "";
+  const texts: string[] = [];
+  for (const entry of sliced.messages) {
+    if (entry.message.role !== "user") continue;
+    for (const part of entry.message.content) {
+      if (part.type === "text") texts.push(part.text);
+    }
+  }
+  return texts.join("\n").trim();
+}
+
+export async function extractTurnInput(
+  prompt: LanguageModelV3Prompt,
+  previousTranscriptFingerprints: readonly string[],
+  contextAllowlist: readonly ContextFragment[],
+  options: ExtractTurnInputOptions = {},
+): Promise<ExtractTurnInputResult> {
+  if (options.signal?.aborted) return { ok: false, error: inputError("aborted") };
+  const sliced = sliceNewMessages(prompt, previousTranscriptFingerprints);
+  if (!sliced.ok) return { ok: false, error: inputError(sliced.reason) };
+  const currentUserMessages = sliced.messages.filter((entry) => entry.message.role === "user");
 
   const parts: ExtractedTurnPart[] = [];
   for (const fragment of contextAllowlist) {
@@ -245,7 +284,7 @@ export async function extractTurnInput(
 
   if (options.signal?.aborted) return { ok: false, error: inputError("aborted") };
   if (parts.length === 0) return { ok: false, error: inputError("no-new-user-input") };
-  return { ok: true, parts, nextTranscriptFingerprints: currentFingerprints };
+  return { ok: true, parts, nextTranscriptFingerprints: sliced.fingerprints };
 }
 
 export interface ApprovalResponse {

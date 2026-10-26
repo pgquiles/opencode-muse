@@ -111,4 +111,33 @@ describe("Conversational approval exchange", () => {
     expect(described[0]?.toolName).toBe("edit_file");
     expect(described[1]?.toolName).toBe("shell");
   });
+
+  test("conversational.derivesLabelsWhenNothingIsPresentable", () => {
+    // MSP network approvals may offer choices without labels: the lettered
+    // prompt must still offer exactly what Muse offered.
+    const derived = conversationalChoices([
+      { choiceId: "net-allow", decision: "approve", scope: "once" },
+      { choiceId: "net-deny", decision: "reject", scope: "once" },
+    ]);
+    expect(derived).toEqual([
+      { choiceId: "net-allow", label: "Approve", scope: "once" },
+      { choiceId: "net-deny", label: "Deny", scope: "once" },
+    ]);
+    expect(matchConversationalChoice(derived, "a")).toMatchObject({ choiceId: "net-allow" });
+    expect(matchConversationalChoice(derived, "Approve")).toMatchObject({ choiceId: "net-allow" });
+  });
+
+  test("conversational.keepsStrictLabelsWhenAnyArePresentable", () => {
+    const mixed = conversationalChoices([
+      { choiceId: "labeled", decision: "approve", label: "Blue", scope: "once" },
+      { choiceId: "unlabeled", decision: "reject", scope: "once" },
+    ]);
+    expect(mixed.map((choice) => choice.choiceId)).toEqual(["labeled"]);
+  });
+
+  test("conversational.fallsBackToChoiceIdsWithoutDecisionOrScope", () => {
+    const derived = conversationalChoices([{ choiceId: "net-allow" }]);
+    expect(derived).toEqual([{ choiceId: "net-allow", label: "net-allow", scope: "" }]);
+    expect(conversationalChoices([{ choiceId: 42 }])).toEqual([]);
+  });
 });

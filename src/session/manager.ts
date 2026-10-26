@@ -145,7 +145,10 @@ export class MuseSessionManager {
     }
   }
 
-  async resolveSession(context: RequestContext): Promise<MuseTurnSession> {
+  async resolveSession(
+    context: RequestContext,
+    options?: { verdictConsumed?: boolean },
+  ): Promise<MuseTurnSession> {
     if (this.closed) throw new MuseUnsupportedRequestError("plugin-closed");
     if (context.kind !== "primary") throw new MuseUnsupportedRequestError(context.kind);
     const canonicalDirectory = canonicalWorkspacePath(context.directory);
@@ -156,6 +159,13 @@ export class MuseSessionManager {
       throw new RegistryWorkspaceMismatchError();
     }
 
+    if (existingBinding && options?.verdictConsumed === true) {
+      // The verdict was already consumed against this binding's parked
+      // requests: reattach without touching the workspace lease the parked
+      // turn still holds. The parked-turn guard below stays for genuinely
+      // new turns, which never set this flag.
+      return existingBinding;
+    }
     if (existingBinding?.joinParkedTurnId !== undefined) {
       // The settled verdicts matched a parked turn: attach to it instead of
       // starting a new one. The parked call still holds the lease; the
@@ -514,6 +524,16 @@ export class MuseSessionManager {
       })}`,
       settledLast: false,
     };
+  }
+
+  /**
+   * Fingerprints the bridge already forwarded for one OpenCode session.
+   * The verdict peek reads these before resolving so it only consumes
+   * fresh user text; undefined when no binding exists yet (the peek then
+   * falls back to the final user turn, and finds nothing pending anyway).
+   */
+  previousTranscriptFingerprints(openCodeSessionId: string): readonly string[] | undefined {
+    return this.bindings.get(openCodeSessionId)?.previousTranscriptFingerprints;
   }
 
   /** Latest offered choices for one pending approval, for prompt rendering. */
