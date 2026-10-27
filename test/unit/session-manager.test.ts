@@ -577,7 +577,9 @@ describe("MuseSessionManager", () => {
     await manager.close();
   });
 
-  test("sessionManager.keepLeavesThePoisonedEntryUntouched", async () => {
+  test("sessionManager.defersToALiveBindingInsteadOfOfferingRecovery", async () => {
+    // A poisoned entry with a live binding is a slow-but-healthy turn (or
+    // the verdict flow's parked turn), not a crash: recovery stays out.
     const root = tempRoot();
     const { manager } = managerAt(root);
     const directory = join(root, "project");
@@ -585,36 +587,84 @@ describe("MuseSessionManager", () => {
     const first = await manager.resolveSession(context("ses_oc_1", directory));
     await first.recordTurnAccepted?.("cmd-1", "turn-1");
     await first.release?.();
+    expect(await manager.consumeRecoveryDecision("ses_oc_1", "A", directory)).toBeNull();
+    await manager.close();
+  });
 
-    const kept = await manager.consumeRecoveryDecision("ses_oc_1", "B", directory);
+  test("sessionManager.letsAnInflightTurnStartThroughInsteadOfRecovering", async () => {
+    // A pending turn/start with a live binding is a slow server acceptance,
+    // not a crash: resolution proceeds (the server queues or dedupes) and no
+    // recovery error fires, so impatient client retries converge silently.
+    const root = tempRoot();
+    const { manager } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.release?.();
+
+    // Plant the ambiguous case directly: turn/start sent, acceptance
+    // unknown, no active turn — exactly the slow-server retry shape.
+    // (A plain resolve leaves the entry clean, so no clearing is needed.)
+    const registry = new SessionRegistry({ stateDirectory: root });
+    await registry.recordPendingCommand("ses_oc_1", workspaceFingerprint(directory), {
+      commandId: "0194f3c2-9a1e-7b3c-8d4e-5f6a7b8c9d0e",
+      method: "turn/start",
+      fingerprint: "a".repeat(64),
+    });
+
+    // Same process, live binding: no recovery error, same session resumed.
+    const second = await manager.resolveSession(context("ses_oc_1", directory));
+    expect(second.sessionId).toBe(first.sessionId);
+    await manager.close();
+  });
+
+  test("sessionManager.keepLeavesThePoisonedEntryUntouched", async () => {
+    const root = tempRoot();
+    const firstAt = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await firstAt.manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    await first.release?.();
+    await firstAt.manager.close();
+
+    // Fresh process, no binding: the crash path offers the choice.
+    const restarted = managerAt(root);
+    const kept = await restarted.manager.consumeRecoveryDecision("ses_oc_1", "B", directory);
     expect(kept).toMatchObject({ abandoned: false });
     expect(kept?.text).toContain("Abandon");
     // The entry still blocks: a direct resolve still fails closed.
-    await expect(manager.resolveSession(context("ses_oc_1", directory)))
+    await expect(restarted.manager.resolveSession(context("ses_oc_1", directory)))
       .rejects.toBeInstanceOf(MuseRecoveryChoiceRequiredError);
-    await manager.close();
+    await restarted.manager.close();
   });
 
   test("sessionManager.abandonDeletesThePoisonedEntry", async () => {
     const root = tempRoot();
-    const { manager, calls } = managerAt(root);
+    const firstAt = managerAt(root);
     const directory = join(root, "project");
     mkdirSync(directory);
-    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    const first = await firstAt.manager.resolveSession(context("ses_oc_1", directory));
     await first.recordTurnAccepted?.("cmd-1", "turn-1");
     await first.release?.();
+    await firstAt.manager.close();
 
-    const abandoned = await manager.consumeRecoveryDecision("ses_oc_1", "A", directory);
+    const restarted = managerAt(root);
+    const abandoned = await restarted.manager.consumeRecoveryDecision("ses_oc_1", "A", directory);
     expect(abandoned).toMatchObject({ abandoned: true });
     expect(abandoned?.text).toContain("Re-prompt");
     const stored = await new SessionRegistry({ stateDirectory: root })
       .get("ses_oc_1", workspaceFingerprint(directory));
     expect(stored).toBeUndefined();
-    // A follow-up resolves cleanly and starts a fresh session.
-    const second = await manager.resolveSession(context("ses_oc_1", directory));
-    expect(second.sessionId).not.toBe(first.sessionId);
-    expect(calls.filter((call) => call.method === "session/start")).toHaveLength(2);
-    await manager.close();
+    // A follow-up resolves cleanly and starts a fresh session (the fake
+    // reuses session ids per harness, so assert a clean re-created entry).
+    await restarted.manager.resolveSession(context("ses_oc_1", directory));
+    expect(restarted.calls.filter((call) => call.method === "session/start")).toHaveLength(1);
+    const recreated = await new SessionRegistry({ stateDirectory: root })
+      .get("ses_oc_1", workspaceFingerprint(directory));
+    expect(recreated).toMatchObject({ pendingCommands: {} });
+    expect(recreated?.activeTurnId).toBeUndefined();
+    await restarted.manager.close();
   });
 
   test("sessionManager.recoveryDecideIgnoresCleanSessions", async () => {

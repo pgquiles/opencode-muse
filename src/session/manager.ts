@@ -186,7 +186,14 @@ export class MuseSessionManager {
     let host: MuseSessionHost | undefined;
     try {
       const stored = await this.options.registry.get(context.sessionID, fingerprint);
-      if (stored && (Object.keys(stored.pendingCommands).length > 0 || stored.activeTurnId !== undefined)) {
+      const poisoned = stored !== undefined
+        && (Object.keys(stored.pendingCommands).length > 0 || stored.activeTurnId !== undefined);
+      if (stored && poisoned && !this.turnLifecycleOwns(stored, existingBinding)) {
+        // Nothing alive owns the stuck turn (fresh process after a crash,
+        // or a failed non-turn command like setModel): fail closed with the
+        // choice attached. A live turn — accepted, or a turn/start awaiting
+        // acceptance — belongs to the turn lifecycle (abort/retract,
+        // timeouts, server-side queuing), never to recovery.
         const block = describeRecoveryBlock(stored);
         throw new MuseRecoveryChoiceRequiredError(
           block ? this.recoveryRefusalText(block) : "stuck turn with no recorded detail",
@@ -578,33 +585,35 @@ export class MuseSessionManager {
     if (!stored) return null;
     const block = describeRecoveryBlock(stored);
     if (!block) return null;
-    const binding = this.bindings.get(openCodeSessionId);
-    if (binding && (binding.host.approvals.pendingApprovalIds().length > 0
-      || binding.host.userInput.describePending().length > 0)) {
-      return null;
-    }
+    // A live binding means resolution decides: the entry may be a
+    // slow-but-healthy in-flight turn (or the verdict flow's parked turn),
+    // which the turn-lifecycle rule lets through, or a failed non-turn
+    // command, which still fails closed. Recovery offers only on fresh
+    // processes, where no binding can vouch for the stuck turn.
+    if (this.bindings.has(openCodeSessionId)) return null;
     if (matchRecoveryDecision(text) !== true) {
       return { text: this.recoveryRefusalText(block), abandoned: false };
     }
     await this.options.registry.deleteEntry(openCodeSessionId, fingerprint);
-    if (binding) {
-      this.bindings.delete(openCodeSessionId);
-      try {
-        await binding.host.close?.();
-      } catch {
-        // Best-effort orphan cleanup; the entry is already gone, so the
-        // next resolve starts fresh regardless.
-      }
-      try {
-        await binding.lease?.release();
-      } catch {
-        // A leaked lease from the dead turn must not block the restart.
-      }
-    }
     return {
       text: `Abandoned the stuck ${block.method} turn — the Muse session link was dropped. Re-prompt to try again. (If the stuck turn actually ran elsewhere, its effects still apply.)`,
       abandoned: true,
     };
+  }
+
+  /**
+   * Whether the stuck entry belongs to a live turn lifecycle rather than a
+   * crash: an accepted turn, or a turn/start awaiting acceptance that the
+   * server may still run, queue, or deduplicate. Only then may resolution
+   * proceed past the poisoned entry.
+   */
+  private turnLifecycleOwns(
+    stored: SessionRegistryEntry,
+    existingBinding: ManagedBinding | undefined,
+  ): boolean {
+    if (!existingBinding) return false;
+    if (stored.activeTurnId !== undefined) return true;
+    return Object.values(stored.pendingCommands).some((command) => command.method === "turn/start");
   }
 
   /** Layer-1 facts for the recovery error: method, age, and Muse session. */
