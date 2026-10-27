@@ -1,6 +1,6 @@
 {
   "name": "opencode-muse",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "OpenCode plugin backed by the official Muse Code CLI and MSP",
   "license": "MIT",
   "type": "module",
