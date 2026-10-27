@@ -496,7 +496,7 @@ export class MuseSessionManager {
   async consumeConversationalVerdict(
     openCodeSessionId: string,
     text: string,
-  ): Promise<{ text: string; settledLast: boolean } | null> {
+  ): Promise<{ text: string; settledLast: boolean; runMessageAsTurn?: boolean } | null> {
     const binding = this.bindings.get(openCodeSessionId);
     if (!binding) return null;
     const pending = binding.host.approvals.describePending();
@@ -532,10 +532,15 @@ export class MuseSessionManager {
       };
     }
     await this.settleApprovalResponses(openCodeSessionId, [{ approvalId: oldest.approvalId, approved: false }]);
-    return this.verdictOutcome(
+    const denied = this.verdictOutcome(
       binding,
-      `Denied ${oldest.toolName ? `\`${oldest.toolName}\`` : "the request"} — no valid option was given. Re-prompt to try again.`,
+      `Denied ${oldest.toolName ? `\`${oldest.toolName}\`` : "the request"} — no valid option was given. That request is closed; your message now runs as a fresh turn.`,
     );
+    // A second mismatch is not a verdict to act on: the user is trying to
+    // say something else. Run their message as a fresh turn instead of
+    // eating it, so a reviving model can never trap the conversation.
+    // (Only when nothing remains parked; otherwise the next round decides.)
+    return denied.settledLast ? { ...denied, runMessageAsTurn: true as const } : denied;
   }
 
   private verdictOutcome(

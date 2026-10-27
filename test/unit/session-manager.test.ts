@@ -512,6 +512,63 @@ describe("MuseSessionManager", () => {
     await manager.close();
   });
 
+  test("sessionManager.flagsASecondMismatchDenyToRunTheMessage", async () => {
+    const root = tempRoot();
+    const { manager, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = exchanges[0] as ApprovalExchange;
+    exchange.requestApproval({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      approvalId: "approval-9",
+      currentRequirementId: { approvalId: "approval-9", sourceIndex: 0 },
+      toolCallId: "call-9",
+      toolName: "network",
+      availableChoices: [
+        { choiceId: "allow-once", decision: "approve", label: "Allow once", scope: "once" },
+        { choiceId: "deny-once", decision: "reject", label: "Deny", scope: "once" },
+      ],
+    });
+
+    const reask = await manager.consumeConversationalVerdict("ses_oc_1", "fadf");
+    expect(reask).toMatchObject({ settledLast: false });
+    expect(reask).not.toHaveProperty("runMessageAsTurn");
+    const deny = await manager.consumeConversationalVerdict("ses_oc_1", "bvvdaf");
+    expect(deny).toMatchObject({ settledLast: true, runMessageAsTurn: true });
+    expect(deny?.text).toContain("That request is closed");
+    await manager.close();
+  });
+
+  test("sessionManager.explicitRejectDoesNotRunTheMessage", async () => {
+    const root = tempRoot();
+    const { manager, exchanges } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+    const exchange = exchanges[0] as ApprovalExchange;
+    exchange.requestApproval({
+      sessionId: first.sessionId,
+      turnId: "turn-1",
+      approvalId: "approval-9",
+      currentRequirementId: { approvalId: "approval-9", sourceIndex: 0 },
+      toolCallId: "call-9",
+      toolName: "network",
+      availableChoices: [
+        { choiceId: "allow-once", decision: "approve", label: "Allow once", scope: "once" },
+        { choiceId: "deny-once", decision: "reject", label: "Deny", scope: "once" },
+      ],
+    });
+
+    const deny = await manager.consumeConversationalVerdict("ses_oc_1", "B");
+    expect(deny).toMatchObject({ settledLast: true });
+    expect(deny).not.toHaveProperty("runMessageAsTurn");
+    await manager.close();
+  });
+
   test("sessionManager.resolvesTheFollowUpTurnAfterAQueuedAnswerWithoutReacquiring", async () => {
     const root = tempRoot();
     const { manager, calls, userExchanges } = managerAt(root);

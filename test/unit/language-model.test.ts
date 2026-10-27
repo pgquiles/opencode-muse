@@ -68,7 +68,7 @@ function fakeRuntime(options: {
   onCancelParked?: () => void;
   settleMatched?: string[];
   hasParkedApprovals?: boolean;
-  conversationalVerdict?: { text: string; settledLast: boolean } | null;
+  conversationalVerdict?: { text: string; settledLast: boolean; runMessageAsTurn?: boolean } | null;
   conversationalAnswer?: { text: string; settledLast: boolean } | null;
   gateEventsAfter?: { count: number; release: Promise<void> };
 } = {}) {
@@ -1145,6 +1145,32 @@ describe("Muse LanguageModelV3 bridge", () => {
     expect(parts.map((part) => part.type)).toEqual(["stream-start", "text-start", "text-delta", "text-end", "finish"]);
     expect((parts[2] as { delta: string }).delta).toContain("Abandoned the stuck turn");
     expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+  });
+
+  test("languageModel.secondMismatchDenyInterruptsAndRunsTheMessage", async () => {
+    const fake = fakeRuntime({
+      events: textEvents(),
+      joinParkedTurnId: "turn-parked",
+      conversationalVerdict: {
+        text: "Denied network — no valid option was given. That request is closed; your message now runs as a fresh turn.",
+        settledLast: true,
+        runMessageAsTurn: true,
+      },
+    });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const parts: Array<Record<string, unknown>> = [];
+    for await (const part of result.stream) parts.push(part as unknown as Record<string, unknown>);
+
+    // Fresh turn (not a join), parked turn interrupted, denial shown first.
+    const starts = fake.commands.filter((command) => command.method === "turn/start");
+    expect(starts).toHaveLength(1);
+    expect(starts[0]!.params).toMatchObject({ input: [{ type: "text", text: "Return the probe answer." }] });
+    const interrupts = fake.commands.filter((command) => command.method === "turn/interrupt");
+    expect(interrupts).toHaveLength(1);
+    expect(interrupts[0]!.params).toMatchObject({ turnId: "turn-parked", retract: true });
+    const deltas = parts.filter((part) => part.type === "text-delta").map((part) => part.delta as string);
+    expect(deltas.some((delta) => delta.includes("Denied network"))).toBe(true);
   });
 
   test("languageModel.verdictsTakePriorityOverAnswers", async () => {

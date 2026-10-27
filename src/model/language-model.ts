@@ -97,7 +97,7 @@ export interface MuseLanguageRuntime {
   previousTranscriptFingerprints?(sessionID: string): readonly string[] | undefined;
   hasParkedApprovals?(sessionID: string): boolean | Promise<boolean>;
   disarmParkedJoin?(sessionID: string): void;
-  consumeConversationalVerdict?(sessionID: string, text: string): Promise<{ text: string; settledLast: boolean } | null>;
+  consumeConversationalVerdict?(sessionID: string, text: string): Promise<{ text: string; settledLast: boolean; runMessageAsTurn?: boolean } | null>;
   describePendingApproval?(sessionID: string, approvalId: string, requirementId: string): { choices: Array<{ choiceId: string; label: string; scope: string }>; toolName?: string } | undefined;
   consumeConversationalAnswer?(sessionID: string, text: string): Promise<{ text: string; settledLast: boolean } | null>;
   describeCurrentUserInputQuestion?(sessionID: string): { question: UserInputQuestionShape; toolName?: string } | undefined;
@@ -164,6 +164,25 @@ function sameSelection(
     && current.providerId === next.providerId
     && current.modelId === next.modelId
     && (current.profileId ?? null) === next.profileId;
+}
+
+/**
+ * Best-effort interrupt of a denied parked turn (same retracting
+ * `turn/interrupt` the abort path uses). The turn never got past its
+ * approval gate, so there is nothing gated to undo; if it already
+ * completed, the fresh turn proceeds regardless.
+ */
+async function interruptParkedTurn(session: MuseTurnSession, turnId: string): Promise<void> {
+  try {
+    await submitCommand(session, "turn/interrupt", session.host.mintCommandId(), {
+      sessionId: session.sessionId,
+      turnId,
+      retract: true,
+    });
+  } catch {
+    // The parked turn may already have completed; never fail the user's
+    // fresh turn because the cleanup raced it.
+  }
 }
 
 async function submitCommand(
@@ -700,12 +719,24 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
       ? await runtime.consumeConversationalVerdict?.(context.sessionID, verdictText)
         ?? await runtime.consumeConversationalAnswer?.(context.sessionID, verdictText)
       : null);
+    let runMessageAsTurn = false;
     if (outcome) {
       initialText = outcome.text;
       // Join only the final verdict while the parked turn is still
       // attached: it resumes the turn. Re-asks, queued items, and
       // dead turns end synthetically with the outcome text.
       syntheticOnly = !outcome.settledLast || session.joinParkedTurnId === undefined;
+      if (outcome.settledLast && "runMessageAsTurn" in outcome && outcome.runMessageAsTurn === true) {
+        // Second mismatch: the user is saying something else, not answering.
+        // The denial is recorded; interrupt the parked turn so a reviving
+        // model can't re-park, clear the join, and run the message as a
+        // fresh turn instead of eating it.
+        const parkedTurnId = session.joinParkedTurnId;
+        session.joinParkedTurnId = undefined;
+        runMessageAsTurn = true;
+        syntheticOnly = false;
+        if (parkedTurnId !== undefined) await interruptParkedTurn(session, parkedTurnId);
+      }
     }
     if (recoveryAbandoned && recovery) {
       // The stuck entry is gone and the session below is fresh, but the
@@ -718,7 +749,7 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     try {
       execution = syntheticOnly
         ? syntheticVerdictExecution()
-        : await runMuseTurn(context, initialText !== undefined ? [] : extracted.parts, options, {
+        : await runMuseTurn(context, initialText !== undefined && !runMessageAsTurn ? [] : extracted.parts, options, {
           ...runtime,
           resolveSession: async () => session,
         }, extracted.nextTranscriptFingerprints);
