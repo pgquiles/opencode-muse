@@ -9652,6 +9652,4944 @@
     "capabilities": "ea2e14f0669fd28c99576b2ef8f58af32b2a424c467395d0b6488c63ed6b7ed2",
     "$defs": "360dc64c851a6f4402e85d54fece0729dfe5b8a47fd5b6ea654d0d2bbb2380aa"
    }
+  },
+  {
+   "cli_version": "1.4.14-R7309.1",
+   "fingerprint": "sha256:c94c3d1f2f51e6424074b9ec43eac3eedcf532d3dcd77351ec1383a87d3049c6",
+   "schema_version": 1,
+   "experimental": false,
+   "provenance": "muse 1.4.14-R7309.1 stable export 2026-10-28",
+   "surface": {
+    "methods": [
+     "approval/decide",
+     "approval/listPending",
+     "computerUseSettings/read",
+     "computerUseSettings/update",
+     "computerUseSetup/check",
+     "computerUseSetup/read",
+     "computerUseSetup/start",
+     "feedback/submit",
+     "goal/clear",
+     "goal/edit",
+     "goal/pause",
+     "goal/resume",
+     "goal/set",
+     "hook/list",
+     "initialize",
+     "item/readOutput",
+     "media/upload",
+     "model/list",
+     "plugin/install",
+     "plugin/list",
+     "plugin/marketplaceAdd",
+     "plugin/marketplaceRemove",
+     "plugin/marketplaceUpdate",
+     "recap/cancel",
+     "recap/request",
+     "session/compact",
+     "session/fork",
+     "session/leave",
+     "session/list",
+     "session/read",
+     "session/rename",
+     "session/resume",
+     "session/setApprovalMode",
+     "session/setModel",
+     "session/setReasoningEffort",
+     "session/sideChat",
+     "session/start",
+     "session/userShell",
+     "skill/import",
+     "skill/list",
+     "skill/setActivation",
+     "subagent/close",
+     "subagent/followupTask",
+     "subagent/interrupt",
+     "subagent/readResult",
+     "subagent/reopen",
+     "subagent/resume",
+     "subagent/sendMessage",
+     "subagent/stop",
+     "task/background",
+     "task/list",
+     "task/stop",
+     "task/stopAll",
+     "turn/cancel",
+     "turn/interrupt",
+     "turn/start",
+     "turn/steer",
+     "turn/unqueue",
+     "usage/read",
+     "userInput/answer",
+     "userInput/cancel",
+     "userInput/clarify",
+     "userInput/interrupt",
+     "view/page",
+     "view/subscribe",
+     "view/unsubscribe",
+     "workflow/cancel",
+     "workflow/childControl",
+     "workflow/pause",
+     "workflow/resume"
+    ],
+    "requests": [
+     "approval/request",
+     "userInput/request"
+    ],
+    "notifications": [
+     "approval/requested",
+     "approval/resolved",
+     "approval/reviewing",
+     "approval/updated",
+     "computerUseSetup/changed",
+     "initialized",
+     "item/completed",
+     "item/delta",
+     "item/started",
+     "item/updated",
+     "monitor/inboxItemAdmitted",
+     "monitor/inboxItemDrained",
+     "monitor/inboxItemVoided",
+     "plugin/changed",
+     "plugin/marketplaceChanged",
+     "recap/completed",
+     "session/approvalModeChanged",
+     "session/branchChanged",
+     "session/closed",
+     "session/contextUsage",
+     "session/goalChanged",
+     "session/leaveCompleted",
+     "session/listChanged",
+     "session/modelChanged",
+     "session/modelRouteUnserved",
+     "session/nameChanged",
+     "session/reasoningEffortChanged",
+     "session/started",
+     "session/statusChanged",
+     "session/todoListChanged",
+     "session/tokenUsage",
+     "session/viewHealthChanged",
+     "skill/changed",
+     "turn/completed",
+     "turn/foregroundCompleted",
+     "turn/modelRetryScheduled",
+     "turn/retracted",
+     "turn/retryScheduled",
+     "turn/started",
+     "turn/unqueued",
+     "usage/changed",
+     "userInput/engaged",
+     "userInput/requested",
+     "userInput/settled",
+     "view/gap"
+    ],
+    "errors": [
+     "approvalAlreadyResolved",
+     "approvalChoiceInvalid",
+     "approvalNotFound",
+     "approvalRequirementStale",
+     "approvalReviewerUnavailable",
+     "backpressured",
+     "boundaryPruned",
+     "cancelled",
+     "capabilityRequired",
+     "commandRejected",
+     "computerUseUnavailable",
+     "forkBoundaryInvalid",
+     "inputTooLarge",
+     "internal",
+     "interrupted",
+     "invalidParams",
+     "invalidRequest",
+     "marketplaceAlreadyExists",
+     "marketplaceNotFound",
+     "methodNotFound",
+     "notFound",
+     "outputUnavailable",
+     "overloaded",
+     "parseError",
+     "pluginMutationsDisabled",
+     "pluginNotFound",
+     "sessionAmbiguous",
+     "sessionInUse",
+     "sessionNotFound",
+     "sessionNotLoaded",
+     "sessionStreamMismatch",
+     "skillNotFound",
+     "uploadNotFound",
+     "userInputAlreadySettled",
+     "userInputAnswerInvalid",
+     "userInputNotFound",
+     "viewTruncated"
+    ],
+    "capabilities": [
+     "computerUseHostSetup",
+     "computerUseSetup",
+     "feedback",
+     "sessionListStream",
+     "sessionMcp",
+     "sessionRename",
+     "userShell"
+    ]
+   },
+   "member_digests": {
+    "methods": {
+     "approval/decide": "0a29edff4a75243f6693d499272e7c0fb6d9c467e6f115fef3af458a0b71dd00",
+     "approval/listPending": "7ecf499009766ce134adb40db9cc4c59bae4840c9d649373fc1aae31ebe4b1b6",
+     "computerUseSettings/read": "a1e7d1183ad4981e954415502978853b70ccdcb7a41b374c3f470c26ccc82f37",
+     "computerUseSettings/update": "d01e616a35ec421808e332ce435c9decf6239b582d9d30351c93519e5eeafb44",
+     "computerUseSetup/check": "053ea1121ffa763fb8f088809a61b7cfdef057f4276b405b76cf453b0dc93dd5",
+     "computerUseSetup/read": "4f1fac0f5162dc5654db9d9520b075eaec2b819b6c78590436d0ace5b896860b",
+     "computerUseSetup/start": "f47975655aa63e904457be232f85444cef07475a8719800329309961d724c587",
+     "feedback/submit": "d654054f904b464e1ec589fd45a28cba96b22905912ccc7fd4cf53d791fafc99",
+     "goal/clear": "cc4800dd5195c45e70bbeba726c6d2f1db4b05a1cf177f1331051fcc1eea410f",
+     "goal/edit": "df73b9296a961b7517ab611c83182d518772d7a241b6eb698a75d4f1c9bd3df2",
+     "goal/pause": "97300eb9d871f089f0b6133aaea682b009ecfb76eb2723e04d1b4be7eae3682d",
+     "goal/resume": "3ff3834dd5b5db4f1ee86125cfdb4452a21509e245676bb729ce38c95f42678b",
+     "goal/set": "8320181db5dcc4ecaa98f8e3571684488ab31fd9e54253d7ceac5a150fc70a77",
+     "hook/list": "45cac581bbf6a03aac33611b4e29b9cd23f024e35a517447aef5f4c1538f54d6",
+     "initialize": "44a7d7acf909e943db3be7ba5100ec891f4e4918ae06a1372bba7b8fe0409195",
+     "item/readOutput": "3cee3a74c7809b8340261d2f4fa3bc1272aa3fcec47415799e9ffde9cb7da1f7",
+     "media/upload": "51b42e247d8e2396af6d83e839a78f55bd0d76eb5b0225dd720907c3d26445e9",
+     "model/list": "e6d478be4448f45ddd592ce74087e5a01d500b1750b463a6da757f7800c5e991",
+     "plugin/install": "491c629a285c8341e2f17b5a379ac5777da4a333b24564ab63c9061ae9e5f20b",
+     "plugin/list": "527aa90a73805c04b4036ad0930dfffc6194011dbf410bd017069737c754fdf4",
+     "plugin/marketplaceAdd": "ff23007ddfe22604851997a2e364448faa0dfb148b3f558318b4db7a228bfad5",
+     "plugin/marketplaceRemove": "d7f553f9039cc2b15fd4d5beff63dd8497897e6ed3521f979f95cff315dfecb1",
+     "plugin/marketplaceUpdate": "43ab14f4bac71b0a20cfc3d47a91e7bec641b3fbe72768b32eea43a400ef8bf8",
+     "recap/cancel": "5d9bc6cab8382b08c65d0722378114dc2561a17a083e3e471912c023f3fdc182",
+     "recap/request": "d25ad988d4b3110541a447c136f638709350036c2682565f04a51b7bbcd0efd4",
+     "session/compact": "1e0c01dcba70263c09f437f6a72bc5c6d287d6e7844db6f896f1f21f5a8b1691",
+     "session/fork": "efff13348c6a226717895add50aa793de3a360da2f9b6b2d2f1b28d66fe01e78",
+     "session/leave": "b352c4c4b778ed4da3bee3a608113d47e3fac66cfa18645f4b3529a5860907b1",
+     "session/list": "8be6e6cd97616ba9869b2b8e5a06c8ae2978cd96423103c33045ccb848b67ea4",
+     "session/read": "31c6726de5b5ccd5e771c0322cf9a73721044d7395b5cd04aa4e43776306ba76",
+     "session/rename": "015942571a100e99481b2b730aa94b82a205c5874e8934e05ddc166b0334b38d",
+     "session/resume": "4fb838ea42f6f381ef1ab33992cdcb1ce40919217fe8e8755c8fb00433783974",
+     "session/setApprovalMode": "f0350aaa1730735f4b913f990619313ae07180c333c0cf81b9f02da22aa01f2c",
+     "session/setModel": "15a719423eb991b720e2dea4ebf090eb1e9e63d0b22763ed0df32e8897dbb236",
+     "session/setReasoningEffort": "7306d7460ac66b0c2db1722fddbed2a6d7dec74d164b036c6a90138cf0a8a64e",
+     "session/sideChat": "2f533e75c6323b0c91b133081ab8576d17c507feaf6e0abb14359585dcd6a8b5",
+     "session/start": "a33f46c45f5076f1dd086c2b37e1697aba6a7ad0d4d3e7ea2d7b1e1c9b941e62",
+     "session/userShell": "2b3f95ca5ab3f8a389d25dc2b7dca3d63a05f1458c8926f6d0c05fb966904212",
+     "skill/import": "135855dfc4a6d02f51dc54b1c8a27af91f7483a73695cdd70d9c4b7c22cb6d5e",
+     "skill/list": "939397e6a48cc9f549e74e50a68157e612440db08e3a9dc5e4f46f20bf07bc3a",
+     "skill/setActivation": "04d7dda3c8051d657b44d05e78c5202759761b80f9ded66f131e2589e58c3ad0",
+     "subagent/close": "2b6ec47b2eaa4b35b9d0eb221ba28250518dc47d85841faabdb280f5bcca6670",
+     "subagent/followupTask": "a1945dfb3d76dc86e8798f3a7c6da7a4ccc129a3894531e2649ec879abc2b2da",
+     "subagent/interrupt": "166fd72c8d68aec17b60ff6eaeb76f768b10af71b1220db9792a6f6b8fe9e371",
+     "subagent/readResult": "ae830a81e07c0ba66c0090ede1201c194e34be04e451dd2cf9854a11421edbc6",
+     "subagent/reopen": "6f38ce4f66b1c969a7d52b2e400ca1432efbc4fc72fcdbcdcbc8509e4ac7a9bb",
+     "subagent/resume": "2ba6e80fa58aec7047864091d968986532aab7a960bf667194af961bce4e1d77",
+     "subagent/sendMessage": "c0dd3775cf2c1efd9810f6363e49f30be0f1360d00ba47f2f0b5ac9bc77e3541",
+     "subagent/stop": "0de7f91fe63f5e0c13cee9306cae1b8a7992e80154a88f1d25982ffb75019ad5",
+     "task/background": "755742966aa9af9841fe9be510cad5ecb169071e6510821f09c896e5dbc4a9e6",
+     "task/list": "e9a319a417f1c521771a2dc3797edba11488e043d7e95beac2e8f39c3fa79dbe",
+     "task/stop": "291db1dd12af098a28325b17d7fd3297a67ece15d57221cc24880488ed0a17bd",
+     "task/stopAll": "13c75f2a60f965b60c5469a35f702b9a74d438978492c3d288bafef86319fb6a",
+     "turn/cancel": "31b99e4f5ea365c0e214c00733ce10c312354022ec51f88d0d91e8f44fe65c3b",
+     "turn/interrupt": "93cf13bc70def747995dbd46a4a54253a60303745be89c38ce244e509dc2ea15",
+     "turn/start": "02380d4131a8e272c87747747a563797e7b1c879a67457d8ded07aa96bb96e93",
+     "turn/steer": "77d363c70a83ddbba775ff1972ca961bbd1240518b1b5d53c2dc52a93ebd5c04",
+     "turn/unqueue": "746c9d00e179b45705ef0f227cc17c57aebe0b0da5b19e4d6e8f06e52dc955fa",
+     "usage/read": "0a6f14268d672e4c4b5c1a4672617b33c8cb65689b995f2e88904fae8c95ef38",
+     "userInput/answer": "bd9b01a5fd2f460a9b6bb89bdcce8a06fb9920cc79d47afb3d4bf2e35a7c2056",
+     "userInput/cancel": "0fd7b00eff373c6f5be4dd017df58320c33ac216eb94ff776ccc78c2f40bae4a",
+     "userInput/clarify": "b92787ecaccfc87ebfe47177ac421ec4781ff06b9c273f82a2379d1d6b53d662",
+     "userInput/interrupt": "d26766306374cc122587cf1baa7596edea40e477954feccabb1dc7ed92193659",
+     "view/page": "1b985604289ac34a36e75bd19e027e34335512b7f754a9a885323fc8ebeebfc0",
+     "view/subscribe": "014681501c59690ecc386965c164f39d6d5349e98826fc54b74aec464b398be9",
+     "view/unsubscribe": "713b8f9db07f9661124cca6db92fc1c319b86d13d6cbafe3b2012e13eb834eb2",
+     "workflow/cancel": "3b5331a70daeb48f36f9e730806a1ae5d8894e37d23d4ae2b7fc4faffe522a72",
+     "workflow/childControl": "40715a6856911b9e3ad17bb6590cab5c5344e1b68cb1941cdb810178ef22d03e",
+     "workflow/pause": "fb8b677fd6fcaf417cc950a94b05c0d82689c1553872a14cba103a85d1cd151e",
+     "workflow/resume": "91212ddb56a45b9f06ce8324387b599f29c5960ae082a32b0ee25b883f48fcff"
+    },
+    "requests": {
+     "approval/request": "24413eac1db7c709da494d3e51b3aa6305459ebd40968d67e698681f7b938511",
+     "userInput/request": "111adb7d9b256d9ce1f8afee175aff8f5b2cd43cb74d3825b3c272c7550192e4"
+    },
+    "notifications": {
+     "approval/requested": "9c9589c3a3a2f4e9fc1a9604f60934c4fd25ee23076c211e868188571f8a5fc2",
+     "approval/resolved": "aebe93af62460951043abb4d04a93243df5751d71b74ec456aac7243feb5b92e",
+     "approval/reviewing": "d342e8ee7b353d2282fc8d2951c2e3fb0034500bbbbbf9ebd832559bf89d629a",
+     "approval/updated": "b6f5283ff6a7522d607c7597079ecf71067d4b29b6cfb658fec3202b8b0f0af8",
+     "computerUseSetup/changed": "b609f66793f10c579cec2282a739ffe70b8de8b340fa64b2fcfa803e4415a385",
+     "initialized": "5decb894e5850b50208ce140e80575aadb8556ecf60a042aff7120e22da5cd31",
+     "item/completed": "fcf40ebf8cee150a6b4d59f916f4c8d6ac25febe1672aebf922d5bfc39f905af",
+     "item/delta": "12aa0b0651e6d625f41447fb9791add6a6f12cd964de8c8dc17093ef9a1e1ea7",
+     "item/started": "c14b0a23f74c4fb7a309aae39dc919262b79d76e1380398001b923281152e97f",
+     "item/updated": "ae9835fe165ec944c1ee4786a943c881629f6226dd9c7a2b17fd3d0a06d8ea3e",
+     "monitor/inboxItemAdmitted": "92af69f4cfdfbbfaa8823968c073dd919e40401cb09c9dcd289855a3e94c8fac",
+     "monitor/inboxItemDrained": "0c389fbd631f2a0e530b7e070cc5a542c493d79d1ee3fe9b5abbf56b4271b6e0",
+     "monitor/inboxItemVoided": "a41ba6c4b7e74a6d2343d85b8110ae9b862d0b6304f56da16d23fb6ebc5b54b0",
+     "plugin/changed": "cdb448cfe59788173568e613d3c8a48a28341ad632f82397eb858510f2e8c956",
+     "plugin/marketplaceChanged": "af4bfde0b8611aab7ea32eff1e6a17e12f7164ce17600c53cd539107ecb886d2",
+     "recap/completed": "b60707dca62f351c03a2de35a741c130aa0c0c1e921be9500d701abfe6ac4404",
+     "session/approvalModeChanged": "ba7313658e39adb452995224572ce548191484ffa01582ff67ec639579654dc6",
+     "session/branchChanged": "3ca5c53acf8f0bcfc267891ec48d52753090bcff1cd66f669d1e684f5ed89640",
+     "session/closed": "29586f2ac5dee6f7466c7810d3f36c47e818d79929a0b0388c8256f2ac4f2c09",
+     "session/contextUsage": "02239e54cf7bb8c05c05dd182547787d7d61bb12a63664bb2deed588ffbf62cf",
+     "session/goalChanged": "526e5ca09da37f2fcf7cac172578ae21149ddbe0ba2a05416afbe1a428a49811",
+     "session/leaveCompleted": "63d3ed35b87934ef071d4dca1a50dcdc03ae1b259e340b8bffd3f29b03c15f53",
+     "session/listChanged": "0b7735882fbd6a835cc3f80343c3a9bfae3a291ff57ab73c556f6d1a33378b85",
+     "session/modelChanged": "fd1c8fa8ca62e7072219d38c707733dbd8561ada3f86286bbb96def675190549",
+     "session/modelRouteUnserved": "a5d7a7a834d3021acb4ff4c75b2c4282a0cbdfcc030ea4c5ea5835bc6067440e",
+     "session/nameChanged": "bbc560534868017e18e28aabd53763d5f434b0ceadb3e64cb05876a96585a8bf",
+     "session/reasoningEffortChanged": "91e29b989abfeac0358698a0b846ce0b0bc95f683def113c44df3fe3ffd981cc",
+     "session/started": "c001e3923eb71ed17b07d1f4852b5a65a9c08bae1f4ee73456b8452e91bec079",
+     "session/statusChanged": "37dfe1ed5737f488f819b77fae3674153f77e4c456c8f35ac6ca471f94d397e5",
+     "session/todoListChanged": "4aa0c42631aad38d0eeca078a5b036b4d210696edf3f08ef8cc7c3b6857275df",
+     "session/tokenUsage": "0264da20b24e3a6b15bb6adca4964b0cf03f2c53e72050bdc40b01ce5e313250",
+     "session/viewHealthChanged": "b8887b284e8d3e6ae26641844532d844fc64d66d48978b8a18b1d26970c6c26f",
+     "skill/changed": "cb22fb0a6e6bc6c9b3fc77b9c47cc834241684dd4da6103404f1b8609d4f7005",
+     "turn/completed": "a41ebebb0486b670e6561e8b044aadfbc3dfa787bb95ecdc8c55d0bc85593c0b",
+     "turn/foregroundCompleted": "c8c27af0018bf612681c31d5879f6ca6a4139e36bcd004371f935790ab7fb1f1",
+     "turn/modelRetryScheduled": "861e68919dd08b46734418d2872972b55560ee0684fefb60c0bb35a63e855927",
+     "turn/retracted": "7c3feca5338c1f0cf6e4ba61cb8c8233ed19dd4903d0540f52d4caa00eaf54cf",
+     "turn/retryScheduled": "12037b6760deb76dbaf00f87f48e96d5db9e44f391203456657cf2a577fe45b7",
+     "turn/started": "ee93bb3bb5733b585976bb6e2bc95794183d3540e8a27dcb5056773830430a47",
+     "turn/unqueued": "6cd01085ef151c35554fd79cadbdbf9d758f7886b6093783d6fde205ad26cc51",
+     "usage/changed": "4a5f67d20b4ca4a3c7e448df993a0d3c30faf6c250dac4156418958a5ebefaa0",
+     "userInput/engaged": "ae0fdb3647effb6337bf6fd67563b008e076588b09520017d4bbc65b3352672a",
+     "userInput/requested": "16af1492fabb95de036b54b33ae2a82ae0aa6ce159723b117036baea7d4d7bc3",
+     "userInput/settled": "e0dfec3b0404e26a660da16707798fd1c5da2c6e1846987ba0edb5c002b0fd07",
+     "view/gap": "946058c7d734e15f24804e3db383bcf6bf079861296982f4c8e123756faa0f17"
+    }
+   },
+   "defs": {
+    "ApprovalAmendment": {
+     "digest": "ff0ee6e4387e8b76ca840905dedcb79cbeb6b85d2fd3836bbe40f4472004a776",
+     "required": [
+      "durability",
+      "rulePreview"
+     ],
+     "props": [
+      "durability",
+      "rulePreview"
+     ]
+    },
+    "ApprovalAmendmentDurability": {
+     "digest": "9ae3eb4fafd851ca4ca3de199d0f36399c091f31ac15f04ce31bff8ac1423227",
+     "required": null,
+     "props": null
+    },
+    "ApprovalChange": {
+     "digest": "a1603b01948a903cc95e387ae2765dab38a47b112074e27c7d58f81a6bc46bcc",
+     "required": [
+      "kind"
+     ],
+     "props": [
+      "choiceId",
+      "decision",
+      "executable",
+      "kind",
+      "reason",
+      "reparsed",
+      "requirementId",
+      "status"
+     ]
+    },
+    "ApprovalChoice": {
+     "digest": "be5d03c20256fd91d0057ed523f4e1dc780d7ce981233bf133270d486cc5d9f2",
+     "required": [
+      "choiceId",
+      "decision",
+      "label",
+      "scope"
+     ],
+     "props": [
+      "acceptsFeedback",
+      "choiceId",
+      "decision",
+      "label",
+      "rulePreview",
+      "scope"
+     ]
+    },
+    "ApprovalChoiceScope": {
+     "digest": "4646d9bf2f23014329c8bd91a8df2c88fccdd94eacb2922a19484c7cbde8bec5",
+     "required": null,
+     "props": null
+    },
+    "ApprovalCuaCardFacts": {
+     "digest": "31c1339b05b101eb4bb98ef72859d42d1587aad644b28c447b4bf4a2965eb955",
+     "required": null,
+     "props": [
+      "data",
+      "page",
+      "steps",
+      "windowTitle"
+     ]
+    },
+    "ApprovalCuaDataFact": {
+     "digest": "12a1b2d49e469f35bf8b9befe472c619d2165e9fe01b2a417106e3f9925a86d4",
+     "required": [
+      "kind"
+     ],
+     "props": [
+      "kind",
+      "mask",
+      "secretKind"
+     ]
+    },
+    "ApprovalCuaMask": {
+     "digest": "c9c58bf23a52d6409bc49caab75c07f656b2eb9c7eddcad8d8c6610be9f2f720",
+     "required": null,
+     "props": [
+      "chars",
+      "last4",
+      "prefix"
+     ]
+    },
+    "ApprovalCuaPage": {
+     "digest": "0529cd631f9f223c39fd688723d4a35098b4910388010cac33cb30ea3d07d232",
+     "required": [
+      "host",
+      "hostAscii"
+     ],
+     "props": [
+      "host",
+      "hostAscii"
+     ]
+    },
+    "ApprovalCuaPoint": {
+     "digest": "67104b61911cb6402468713f713098eee5e54be60ecdbb866d8087b4b8c68a45",
+     "required": [
+      "x",
+      "y"
+     ],
+     "props": [
+      "x",
+      "y"
+     ]
+    },
+    "ApprovalCuaStep": {
+     "digest": "1a157a9770e7c9be7360a84d5334bf66be710cabfff571161c78bc6a7563842e",
+     "required": [
+      "action",
+      "effect",
+      "kind",
+      "step"
+     ],
+     "props": [
+      "action",
+      "chord",
+      "effect",
+      "kind",
+      "label",
+      "point",
+      "roleWord",
+      "step"
+     ]
+    },
+    "ApprovalDecideParams": {
+     "digest": "fd125910fd12059e63c9d4e80846c0536fff312e1d560ac91c3f9a5dca4f42d2",
+     "required": [
+      "approvalId",
+      "choiceId",
+      "commandId",
+      "requirementId",
+      "sessionId"
+     ],
+     "props": [
+      "approvalId",
+      "choiceId",
+      "commandId",
+      "feedback",
+      "requirementId",
+      "sessionId"
+     ]
+    },
+    "ApprovalDecideResult": {
+     "digest": "995f47cc2b1b30b4a671fb306d3469f22e2a49b9134b37c4f717a6dcb774e322",
+     "required": [
+      "approvalId",
+      "commandId",
+      "status",
+      "terminal"
+     ],
+     "props": [
+      "approvalId",
+      "commandId",
+      "status",
+      "terminal"
+     ]
+    },
+    "ApprovalDecision": {
+     "digest": "a7e15692a989cca58e2e66afc0af0dde48f14466f59ea5d7a91466be71f3b4a8",
+     "required": null,
+     "props": null
+    },
+    "ApprovalListPendingParams": {
+     "digest": "141cac0d882420afbbd6f6368a1ecdcc52965840f5c840e41eb094351964d07b",
+     "required": [
+      "sessionId"
+     ],
+     "props": [
+      "sessionId"
+     ]
+    },
+    "ApprovalListPendingResult": {
+     "digest": "bf6dd19e0c308b4204ac63cec77b54b25fc3923dad9df5c7d0cc083440ef18ca",
+     "required": [
+      "approvals",
+      "userInputs"
+     ],
+     "props": [
+      "approvals",
+      "userInputs"
+     ]
+    },
+    "ApprovalMode": {
+     "digest": "94038835a59cfbd97686bd0faffdc62599c99724d743381383330e9cdcaa8c6f",
+     "required": null,
+     "props": null
+    },
+    "ApprovalModeApplyOutcome": {
+     "digest": "46b3db22fa0fda38c228115a5eb6e6ba5eecdc6c6615093a9b8b3bee2aa9d9ec",
+     "required": null,
+     "props": null
+    },
+    "ApprovalModeSource": {
+     "digest": "ed3ceb1e04e68136ef1d73a6b3f37486f5778bb4de299ff18899c0feb28b71dd",
+     "required": null,
+     "props": null
+    },
+    "ApprovalOrigin": {
+     "digest": "69fd9420e96a13bcc79f633ec09cfb491947617527ab1fe1d29519c841b377e0",
+     "required": [
+      "kind"
+     ],
+     "props": [
+      "command",
+      "kind",
+      "url"
+     ]
+    },
+    "ApprovalPersistenceStatus": {
+     "digest": "507ea64ca7328c5b984bcc00b00fbb1b69a6151aab51cf5ec080b9ba9bf70d7f",
+     "required": null,
+     "props": null
+    },
+    "ApprovalPolicyResult": {
+     "digest": "08bc56f48f34e27260ad172d66217597d6f98f66b4a3743920a4a872ff6f7953",
+     "required": null,
+     "props": null
+    },
+    "ApprovalRequestParams": {
+     "digest": "13934c7d3f25440b4ffe8987268cd2eeebd60182131caef9e0b7f306c869a891",
+     "required": [
+      "approvalId",
+      "availableChoices",
+      "currentRequirementId",
+      "itemId",
+      "judgeEscalated",
+      "protectedWrite",
+      "rawArgs",
+      "sessionId",
+      "sourceRange",
+      "subject",
+      "taskId",
+      "toolCallId",
+      "toolName",
+      "turnId",
+      "viewCursor"
+     ],
+     "props": [
+      "approvalId",
+      "availableChoices",
+      "cuaCardFacts",
+      "currentRequirementId",
+      "itemId",
+      "judgeEscalated",
+      "protectedWrite",
+      "rawArgs",
+      "reviewerReason",
+      "sessionId",
+      "sourceRange",
+      "subagentOrigin",
+      "subject",
+      "taskId",
+      "toolCallId",
+      "toolName",
+      "turnId",
+      "viewCursor"
+     ]
+    },
+    "ApprovalRequirementRef": {
+     "digest": "a424ca5c2e0edfb5e1c8eb038f5b9a7ff0a380192de9afb126b1076e11f48076",
+     "required": [
+      "approvalId",
+      "sourceIndex"
+     ],
+     "props": [
+      "approvalId",
+      "sourceIndex"
+     ]
+    },
+    "ApprovalResolutionSummary": {
+     "digest": "ea7ae2d0fd26e101c1af3fe347151cfcd1494d7fcd6eb26d97a1c02fc4b59ece",
+     "required": [
+      "decision",
+      "resolvedBy",
+      "viewCursor"
+     ],
+     "props": [
+      "decision",
+      "resolvedBy",
+      "viewCursor"
+     ]
+    },
+    "ApprovalResolvedBy": {
+     "digest": "07ef16de8f657767cc1399969e34c1086a57995e7cc78cf91361e60decbe5ac7",
+     "required": null,
+     "props": null
+    },
+    "ApprovalResolvedParams": {
+     "digest": "3b3521734626a84f845a37921c1b0b2cb5e4ffb01d670a8fec411881c5a6fc34",
+     "required": [
+      "approvalId",
+      "decision",
+      "itemId",
+      "policyResult",
+      "resolvedBy",
+      "sessionId",
+      "sourceRange",
+      "stageEvidence",
+      "turnId",
+      "viewCursor"
+     ],
+     "props": [
+      "amendment",
+      "approvalId",
+      "decidedAt",
+      "decidedByCommandId",
+      "decision",
+      "itemId",
+      "policyResult",
+      "resolvedBy",
+      "sessionId",
+      "sourceRange",
+      "stageEvidence",
+      "subagentOrigin",
+      "turnId",
+      "viewCursor"
+     ]
+    },
+    "ApprovalStage": {
+     "digest": "fd3d8e813fe81080e33f1284703fb195522e603d6b4d04dfec1cf1e310099704",
+     "required": [
+      "argv",
+      "argvComplete",
+      "position",
+      "requirementId",
+      "resolution",
+      "totalStages"
+     ],
+     "props": [
+      "argv",
+      "argvComplete",
+      "position",
+      "requirementId",
+      "resolution",
+      "suggestedPrefix",
+      "totalStages"
+     ]
+    },
+    "ApprovalStageEvidence": {
+     "digest": "f99264713438af8b930f9257630b469ea7fa42999d6556732f7c0e03987c9905",
+     "required": [
+      "argv",
+      "position",
+      "requirementId",
+      "resolution",
+      "totalStages"
+     ],
+     "props": [
+      "argv",
+      "position",
+      "requirementId",
+      "resolution",
+      "totalStages"
+     ]
+    },
+    "ApprovalStageResolution": {
+     "digest": "433c1595c073c04ef90d81cae70ba202aa1959b36b18a770f4b6e5345aedf3f1",
+     "required": [
+      "kind"
+     ],
+     "props": [
+      "argvPrefix",
+      "diagnostic",
+      "kind"
+     ]
+    },
+    "ApprovalSubagentOrigin": {
+     "digest": "d77446688ab07d101d6d2e37afe0ea35ff50e6c18aa49a236eacd50f26e5f422",
+     "required": [
+      "childRunId",
+      "childSessionId",
+      "subagentId"
+     ],
+     "props": [
+      "childRunId",
+      "childSessionId",
+      "subagentId"
+     ]
+    },
+    "ApprovalSubject": {
+     "digest": "5f2e024d93da9c06d5e0d131f43d9763fb0f41f5c3c74989167658c54ce9f784",
+     "required": [
+      "kind"
+     ],
+     "props": [
+      "access",
+      "command",
+      "host",
+      "kind",
+      "origin",
+      "path",
+      "port",
+      "protocol",
+      "stages",
+      "target",
+      "toolName",
+      "workspaceRoot"
+     ]
+    },
+    "ApprovalSuggestedPrefix": {
+     "digest": "b005c1340d079fc834667b05ba9cea2c0c07efe5559600247a4d12469add3c22",
+     "required": [
+      "argvPrefix",
+      "label"
+     ],
+     "props": [
+      "argvPrefix",
+      "label"
+     ]
+    },
+    "ApprovalUpdatedParams": {
+     "digest": "bcf809d4d9313ec19f91418f5e92241b2f2019b1fd532bf4ce199873be144c52",
+     "required": [
+      "approvalId",
+      "availableChoices",
+      "change",
+      "currentRequirementId",
+      "sessionId",
+      "sourceRange",
+      "subject",
+      "viewCursor"
+     ],
+     "props": [
+      "approvalId",
+      "availableChoices",
+      "change",
+      "currentRequirementId",
+      "sessionId",
+      "sourceRange",
+      "subagentOrigin",
+      "subject",
+      "viewCursor"
+     ]
+    },
+    "AttentionFlag": {
+     "digest": "e250666f7c7e127560545af89385f60fc1f2073a82e0c974cc4ea32533a22fe8",
+     "required": null,
+     "props": null
+    },
+    "BackgroundInitiator": {
+     "digest": "68f36c7ae5017b334ad154583beb66d4e85450eaccd9a421ab8da4d999aea724",
+     "required": null,
+     "props": null
+    },
+    "BackgroundTerminalCompletion": {
+     "digest": "fb4615fff5e5ef4912ef7cad455b05ed71c7abc6e4c742b3b3c35da5c19f6d9a",
+     "required": [
+      "command",
+      "output",
+      "outputTruncated",
+      "terminalStatus",
+      "toolCallId"
+     ],
+     "props": [
+      "command",
+      "output",
+      "outputTruncated",
+      "terminalStatus",
+      "toolCallId"
+     ]
+    },
+    "BlockedPrompt": {
+     "digest": "7f88fd3f54fe5fb280f2202cb0935f31af1ed834d4af642457a5ac7101d46c0f",
+     "required": [
+      "text"
+     ],
+     "props": [
+      "text"
+     ]
+    },
+    "BranchState": {
+     "digest": "149f855c2f4b6ebb2cb7fc650fa5a05112ec8a1fab142713e7ac4b9211e52310",
+     "required": [
+      "branch",
+      "workspaceRoot"
+     ],
+     "props": [
+      "branch",
+      "vcs",
+      "workspaceRoot"
+     ]
+    },
+    "CapabilityName": {
+     "digest": "4cbb4d427b800b8a64fa3c198b013c71c9cf4449bcf30675fac7c3e13dc635c6",
+     "required": null,
+     "props": null
+    },
+    "CheckpointBoundary": {
+     "digest": "4baea12fb40cc3011e99dceb768c8a1d5a80941c4bbac655c91133a210a4b2a0",
+     "required": [
+      "throughItemId"
+     ],
+     "props": [
+      "throughItemId"
+     ]
+    },
+    "ClientCapabilities": {
+     "digest": "f40c39579c3f45600cdc0c51b83ad7f78025977db89cda6c93e136d40f81cf32",
+     "required": null,
+     "props": [
+      "experimentalApi",
+      "optOutNotificationMethods",
+      "requestedCapabilities",
+      "userInputDialogs"
+     ]
+    },
+    "ClientInfo": {
+     "digest": "e7bbcb9e56ee2b3da73eb7c8f7cfbe142e82018d92154ee51ae57ea4d024e268",
+     "required": [
+      "name",
+      "version"
+     ],
+     "props": [
+      "name",
+      "title",
+      "version"
+     ]
+    },
+    "CodeModeLanguage": {
+     "digest": "89094b691b03cf74df0840f359ec9646c870920f8daac36a6dda7d6b71f28b16",
+     "required": null,
+     "props": null
+    },
+    "CodeModeOutputSpan": {
+     "digest": "a484446af2982add92c91be692218a068f00d62ea23d7609457586565cccf23a",
+     "required": [
+      "lengthBytes",
+      "offsetBytes",
+      "stream"
+     ],
+     "props": [
+      "lengthBytes",
+      "offsetBytes",
+      "stream"
+     ]
+    },
+    "CodeModeOutputStream": {
+     "digest": "88aef34f7cd27904bd86f3e61f9885c8d766e5cd8764f6404406c46ad50772bf",
+     "required": null,
+     "props": null
+    },
+    "CodeModeReceipt": {
+     "digest": "485d53fc08d97aba552de1dc8d7af9767290adf67177926a25b640703ba1d15c",
+     "required": null,
+     "props": [
+      "cellItemId",
+      "language",
+      "outputSpans",
+      "sourceArg"
+     ]
+    },
+    "CommandAcceptedResult": {
+     "digest": "42ccba788c1f7e5ed35ed7e2128dbdef41b400bd37f4b19dcf93006418e9e945",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "status"
+     ]
+    },
+    "CommandAckStatus": {
+     "digest": "fe911d9ee168c93a69a080f6272cc39ff5a9ac6f0823e1ac905ae73b27d1b4bf",
+     "required": null,
+     "props": null
+    },
+    "CommandStatus": {
+     "digest": "f7dd911becece30fe13574d5f0b935c4ccd4adaf8c9d46c00e29a43258c1e379",
+     "required": null,
+     "props": null
+    },
+    "CompactStatus": {
+     "digest": "0a3353ae10af776ace360f0d443f8d045971a076efe0556cf0e78777747addaa",
+     "required": null,
+     "props": null
+    },
+    "CompactionOutcome": {
+     "digest": "36f8d7ef69290125b0d80a497f419400a363d3d2b6ded8e4df6a00739de47c78",
+     "required": null,
+     "props": null
+    },
+    "CompactionTrigger": {
+     "digest": "1c212a6c41fa07059bbc5437760b5927f7b440d83baf502dd7fcd65e0241f730",
+     "required": null,
+     "props": null
+    },
+    "ComputerUseApp": {
+     "digest": "f79193f4f1dfba1bbbe97b1f2031de000719ed9eba3dd83b26c7a7a6713b9e15",
+     "required": [
+      "bundleId",
+      "choice"
+     ],
+     "props": [
+      "bundleId",
+      "choice",
+      "lastAskedAt",
+      "locked",
+      "lockedBy",
+      "name"
+     ]
+    },
+    "ComputerUseAppChoice": {
+     "digest": "b055589f794eaf64b5015fa5fc3b79f1a42f9908ce9ad73e9be3c355ed70f3bc",
+     "required": null,
+     "props": null
+    },
+    "ComputerUseAppLock": {
+     "digest": "fb826d7027b89e06055a5eb9f2eec164ee9a5159025f09ad050bb0bf3b26a74d",
+     "required": null,
+     "props": null
+    },
+    "ComputerUseAppPatch": {
+     "digest": "518f411dc2fd9bce63bfd0d7f2f7e99e6ea5601ae1791753af7f39023ba66e00",
+     "required": [
+      "bundleId",
+      "choice"
+     ],
+     "props": [
+      "bundleId",
+      "choice"
+     ]
+    },
+    "ComputerUseBlockedApp": {
+     "digest": "02e966c3be8edb3ea20239d3109f42ac1d9b0c2486efb4df35612abcdfe8e116",
+     "required": [
+      "bundleId",
+      "locked"
+     ],
+     "props": [
+      "bundleId",
+      "locked",
+      "prefix"
+     ]
+    },
+    "ComputerUseChoice": {
+     "digest": "bc21412bc867ac2b3bff3daa60058445a36c0d251930acf5aa54741ef9f65744",
+     "required": null,
+     "props": null
+    },
+    "ComputerUseInstalledApp": {
+     "digest": "a78f53a66c86528f0a68be8ad0deaaed86d658f3be9c728571a32d1bcb49a3a0",
+     "required": [
+      "bundleId",
+      "name"
+     ],
+     "props": [
+      "bundleId",
+      "name"
+     ]
+    },
+    "ComputerUsePermission": {
+     "digest": "fff4229b79bdeec80b28ac8403b01311376d301ee9a455442c0e830f90759bc0",
+     "required": null,
+     "props": null
+    },
+    "ComputerUseSettings": {
+     "digest": "18a996083d9112f88153b3ef81004815646031b94891a5165239402a3a796e86",
+     "required": [
+      "blockedApps",
+      "computerControl",
+      "screenshots"
+     ],
+     "props": [
+      "apps",
+      "blockedApps",
+      "computerControl",
+      "installedApps",
+      "screenshots"
+     ]
+    },
+    "ComputerUseSettingsReadParams": {
+     "digest": "85e046725a87dca2f6c3a32d7a4ac2b069bcb3f70db6cf1b157c609df5d146e2",
+     "required": null,
+     "props": [
+      "installed",
+      "showBuiltIns"
+     ]
+    },
+    "ComputerUseSettingsUpdateParams": {
+     "digest": "40b7828b1255770901340e74e4aca3199888a0c669a15e6c2bcc2027df5dfedf",
+     "required": null,
+     "props": [
+      "apps",
+      "blockApps",
+      "computerControl",
+      "screenshots",
+      "unblockApps"
+     ]
+    },
+    "ComputerUseSetupChanged": {
+     "digest": "b6aa4abb9553924822eba92391fe8ccdbd974ecdf6bc3e04cea8c0a3483816e6",
+     "required": [
+      "state"
+     ],
+     "props": [
+      "sessionId",
+      "state"
+     ]
+    },
+    "ComputerUseSetupPhase": {
+     "digest": "bac8bbfb6e162e4583be1e900d8e81392b3d77e45437cb1b0ec89a756444ceff",
+     "required": null,
+     "props": null
+    },
+    "ComputerUseSetupReadParams": {
+     "digest": "bb540a8f79e6da8f8a7c1db55da8f5b40cee1962cddd9adddca7ccae5a14fbd7",
+     "required": null,
+     "props": [
+      "sessionId"
+     ]
+    },
+    "ComputerUseSetupStartParams": {
+     "digest": "7a096d036d57a71fb2e7adb2450f4a76713f9dee4c1ab377f2dc79e1d99bf0e5",
+     "required": [
+      "commandId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId"
+     ]
+    },
+    "ComputerUseSetupState": {
+     "digest": "874c13fe77b0dbdf91ac1d60230960f5e546e3809885fa252e9d694820015a3b",
+     "required": [
+      "accessibility",
+      "inputMonitoring",
+      "screenRecording",
+      "setup"
+     ],
+     "props": [
+      "accessibility",
+      "inputMonitoring",
+      "message",
+      "refused",
+      "screenRecording",
+      "setup"
+     ]
+    },
+    "ContextPressureLevel": {
+     "digest": "7752f3a63517c22ac5863bab4f1c82b7affdf87902ae853b17032c1f09e02695",
+     "required": null,
+     "props": null
+    },
+    "ContextUsage": {
+     "digest": "ccbbf0adbd7bdf118a6a6ebadfb37fb71232877fc3ccd0448b238528bd75842d",
+     "required": [
+      "pressure",
+      "usedTokens"
+     ],
+     "props": [
+      "pressure",
+      "usedTokens",
+      "windowTokens"
+     ]
+    },
+    "CronReceipt": {
+     "digest": "04366933b008584731e8d7ac1fe908636fa78b284810d4386d91c5f91f9e7f10",
+     "required": null,
+     "props": [
+      "jobId",
+      "jobs",
+      "nextFireAtMs"
+     ]
+    },
+    "CronReceiptJob": {
+     "digest": "24d60ed023c7c753f7a26672719b9b3c98c178c022a765399992e7424a18c67a",
+     "required": [
+      "jobId",
+      "nextFireAtMs"
+     ],
+     "props": [
+      "jobId",
+      "nextFireAtMs"
+     ]
+    },
+    "CumulativeCost": {
+     "digest": "b6192443699f25be92bd9fe6e75cf985e4a444681dd21e92cd7fc51e1c2d4e74",
+     "required": [
+      "partial",
+      "usd"
+     ],
+     "props": [
+      "partial",
+      "usd"
+     ]
+    },
+    "CumulativeTokenUsage": {
+     "digest": "1399f482a6dc4f3cb3b742a4d94985540a518c98e8221d41384214a16c767444",
+     "required": [
+      "outputTokens",
+      "promptTokens",
+      "totalTokens"
+     ],
+     "props": [
+      "cacheReadTokens",
+      "cacheWriteTokens",
+      "cost",
+      "outputTokens",
+      "promptTokens",
+      "totalTokens"
+     ]
+    },
+    "DamagedRange": {
+     "digest": "a42be24579bcb1887d15e9250e913fed2d1c7aa2c9b8034d6b253653ecd7c0ea",
+     "required": [
+      "missingRecords",
+      "readableAfterAt",
+      "unreadableLines"
+     ],
+     "props": [
+      "lastGoodTurnId",
+      "missingRecords",
+      "readableAfterAt",
+      "readableBeforeAt",
+      "unreadableLines"
+     ]
+    },
+    "EarlierHistory": {
+     "digest": "12ec1850f6c6a67e90c7b384607a092ba8eeed83dd2b17fe9506622dd776ef49",
+     "required": [
+      "messages"
+     ],
+     "props": [
+      "messages"
+     ]
+    },
+    "EarlierHistoryMessage": {
+     "digest": "c6d5a03cca7fc4115210caf72c2f3d7e5176227c9be35c64af1f947e27b53ea6",
+     "required": [
+      "role",
+      "text"
+     ],
+     "props": [
+      "role",
+      "text"
+     ]
+    },
+    "EffectiveApprovalModeState": {
+     "digest": "331a6830c2325cab32cceb64e8a8813b31994387533e32b771ada235b13dd730",
+     "required": [
+      "lastCommandId",
+      "mode",
+      "source"
+     ],
+     "props": [
+      "lastCommandId",
+      "mode",
+      "source"
+     ]
+    },
+    "EffectiveModel": {
+     "digest": "3e032321fe02d9e52943c08181457e5078a19f40feeb950b8098f41a86d9647b",
+     "required": [
+      "modelId",
+      "providerId",
+      "source"
+     ],
+     "props": [
+      "modelId",
+      "providerId",
+      "source"
+     ]
+    },
+    "ErrorData": {
+     "digest": "529c4e11ba6c2f652b6f42ca520d9758c8665864e1b27a077c90ca322cf56567",
+     "required": [
+      "kind"
+     ],
+     "props": [
+      "alignedNextOffset",
+      "anchor",
+      "approvalId",
+      "availability",
+      "capability",
+      "capacity",
+      "choiceId",
+      "commandId",
+      "currentRequirementId",
+      "descriptor",
+      "details",
+      "earliestCursor",
+      "itemId",
+      "kind",
+      "lastTurnId",
+      "latestBoundaryCursor",
+      "limitBytes",
+      "marketplace",
+      "name",
+      "outputRef",
+      "paths",
+      "reason",
+      "recoveryObservation",
+      "resolution",
+      "retryable",
+      "seedFallbackReason",
+      "seedPath",
+      "selector",
+      "sessionId",
+      "settlement",
+      "uploadId",
+      "userInputId",
+      "viewCursor"
+     ]
+    },
+    "ErrorKind": {
+     "digest": "ed0f7f1ad126c9efd45d2696b0edcc6a3439d135a9b9727cd4bfaf59dcc10bfa",
+     "required": null,
+     "props": null
+    },
+    "ErrorObject": {
+     "digest": "1bd7eed3b9f86596666c04a9fde80b3794c591a3b56af63ad3b9d613349ce7c4",
+     "required": [
+      "code",
+      "message"
+     ],
+     "props": [
+      "code",
+      "data",
+      "message"
+     ]
+    },
+    "ErrorResponse": {
+     "digest": "1b12d9e47bba39ebf23c99d79a9b7490edc9bb03731aadb28267cc7395423af0",
+     "required": [
+      "error",
+      "id",
+      "jsonrpc"
+     ],
+     "props": [
+      "error",
+      "id",
+      "jsonrpc"
+     ]
+    },
+    "FeedbackClassification": {
+     "digest": "fbd588daadcdfca5c95ed36dff6f8e8a0a0d55fbd0a5d9ec1015d3705fa4aff4",
+     "required": null,
+     "props": null
+    },
+    "FeedbackSubmitOutcome": {
+     "digest": "d4edabf2a2ed30b4fe972a3bfe4eac721776f6b07aeff8b1406bf0e8c696e1bf",
+     "required": null,
+     "props": null
+    },
+    "FeedbackSubmitParams": {
+     "digest": "46e47362eb49b7cd288f833e6ffc3abf377e34a220db448a178b6348c4395ad8",
+     "required": [
+      "classification",
+      "note",
+      "withFiles"
+     ],
+     "props": [
+      "attachSessionRecord",
+      "classification",
+      "clientArtifactsPath",
+      "note",
+      "sessionId",
+      "withFiles"
+     ]
+    },
+    "FeedbackSubmitResult": {
+     "digest": "25c775726e650f6f90ba16facb3ca11ea0347a3b3081d59db8864f4f797d78ff",
+     "required": [
+      "bundlePath",
+      "outcome",
+      "sessionRecordAttached",
+      "sessionRecordTruncated"
+     ],
+     "props": [
+      "bundlePath",
+      "cause",
+      "localTracingNote",
+      "outcome",
+      "retryAfterMs",
+      "sessionNote",
+      "sessionRecordAttached",
+      "sessionRecordTruncated",
+      "taskId",
+      "uploadId"
+     ]
+    },
+    "ForkCutPoint": {
+     "digest": "ae4ecb2f253254046d57838157f56d8f310dbab1c283a19262d70f0e7d34bf06",
+     "required": [
+      "lastTurnId"
+     ],
+     "props": [
+      "lastTurnId"
+     ]
+    },
+    "ForkProvenance": {
+     "digest": "4b66b731696f9a565a2597f197ba2ae52de7c77f282f9ddcf1aa5de850b79f73",
+     "required": [
+      "commandId",
+      "cutCursor",
+      "cutExplicit",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "cutCursor",
+      "cutExplicit",
+      "sessionId"
+     ]
+    },
+    "Goal": {
+     "digest": "d9eb2b3e5afeabe54c82dc319589cfd6f44f729e6f903a27f1bb0f263c917164",
+     "required": [
+      "objective",
+      "percentComplete",
+      "status"
+     ],
+     "props": [
+      "createdAtMs",
+      "currentWork",
+      "nextWork",
+      "objective",
+      "percentComplete",
+      "status",
+      "updatedAtMs"
+     ]
+    },
+    "GoalClearParams": {
+     "digest": "bfb53e8492142d2ad23681f881d7e93b00b3e7a3f4dda55061320df359a5cbef",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId"
+     ]
+    },
+    "GoalCommandResult": {
+     "digest": "8e4c8a3f59f0cda846df16749a0abfe09aa32a4c1db4655de8d8ace09d3cf85c",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "turnId"
+     ]
+    },
+    "GoalEditParams": {
+     "digest": "3b85fddf052d7b9f0e625916c84da2c61a21f976b23978fef3faf7f0ef273913",
+     "required": [
+      "commandId",
+      "objective",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "objective",
+      "sessionId"
+     ]
+    },
+    "GoalPauseParams": {
+     "digest": "61f20a7d890c1d16d4ec6cfd5cefb360585bc03d0c43bbad96fbf9f1cfaa6bd5",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId"
+     ]
+    },
+    "GoalResumeParams": {
+     "digest": "db2fe353b4088e134d6816a888d519d20a61b778f6b630b9984072b2537eb1b6",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId"
+     ]
+    },
+    "GoalSetParams": {
+     "digest": "dc2ad93ea640ecfeec8e48f906e33a970060327e01e594bda59ae6d37c4cac18",
+     "required": [
+      "commandId",
+      "objective",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "objective",
+      "sessionId"
+     ]
+    },
+    "HeldFor": {
+     "digest": "007ef6879614e93a0e6b738de082f57362b4126e61fe79e51ab6d5d781579906",
+     "required": null,
+     "props": null
+    },
+    "HistoryMode": {
+     "digest": "46ee2d98801e3f2a3fe6cbe3bf1f26db5348b6acf75fe08b7af169cf585a5ff0",
+     "required": null,
+     "props": null
+    },
+    "HistoryNoneReason": {
+     "digest": "7c6c2730c1f522904ee0849abe2d0b8b56d565d8179aee89de17a933c8780149",
+     "required": null,
+     "props": null
+    },
+    "HistoryPreference": {
+     "digest": "9ec6827ac2f2d980ccac116cc0a5da1267955322b971ef58fc888c13df371e30",
+     "required": null,
+     "props": null
+    },
+    "HookCatalogEntry": {
+     "digest": "13375e8a94ffa0d2b41c75aad4222c3a68472754a690f3253b00c76f5e798fd6",
+     "required": [
+      "enabled",
+      "event",
+      "handlerKind",
+      "key"
+     ],
+     "props": [
+      "enabled",
+      "event",
+      "handlerKind",
+      "key"
+     ]
+    },
+    "HookEventName": {
+     "digest": "3d450c528254a0ab2a3f1cd2b731e46f403f3eb10f643ceea3f34d7dea26abee",
+     "required": null,
+     "props": null
+    },
+    "HookHandlerKind": {
+     "digest": "a12c398e3bdadd0e354c64a69bf4cf9007ba8635afbf4e1a988820877a0e104c",
+     "required": null,
+     "props": null
+    },
+    "HookListParams": {
+     "digest": "9f51fe02a838c05adb9d594f608e2954c430c6f762356671c65eda76c209a2f7",
+     "required": [
+      "sessionId"
+     ],
+     "props": [
+      "sessionId"
+     ]
+    },
+    "HookListResult": {
+     "digest": "5dd95ecee82493e14f7a723e30344d1c4cbe6068a383f8d9c373c246c449c0bc",
+     "required": [
+      "hooks"
+     ],
+     "props": [
+      "hooks"
+     ]
+    },
+    "HookRunStatus": {
+     "digest": "53154dbf153d7a09b4acdd5d2e41aad525688bb3995769ce11abdfdfdfb9711d",
+     "required": null,
+     "props": null
+    },
+    "IfBusy": {
+     "digest": "4bcf710ccf690f6f5a38b6a774497eaf722c59724543bb2756f3829909fd822e",
+     "required": null,
+     "props": null
+    },
+    "InitializeParams": {
+     "digest": "ab4649deeed2d2c14eccb00b38293726fa2ac6d298c583c0dcb2bfa7730986d9",
+     "required": [
+      "clientInfo"
+     ],
+     "props": [
+      "capabilities",
+      "clientInfo"
+     ]
+    },
+    "InitializeResult": {
+     "digest": "f78801e9c3d35e2d6a54ebc6f905d88de19e56e63623f7c2abffbcffb8cace7f",
+     "required": [
+      "experimentalApi",
+      "grantedCapabilities",
+      "museHome",
+      "platformFamily",
+      "platformOs",
+      "schema",
+      "serverInfo",
+      "userAgent"
+     ],
+     "props": [
+      "experimentalApi",
+      "grantedCapabilities",
+      "museHome",
+      "platformFamily",
+      "platformOs",
+      "sandboxAvailability",
+      "sandboxUnavailableReason",
+      "schema",
+      "serverInfo",
+      "sessionDurability",
+      "userAgent"
+     ]
+    },
+    "Item": {
+     "digest": "14b3e23a532271e214ca712bca7e417008a54b7e3fc07c8b46fadecb5a4e09c8",
+     "required": [
+      "itemId",
+      "kind",
+      "revision",
+      "status"
+     ],
+     "props": [
+      "agentPath",
+      "approvalId",
+      "args",
+      "attachments",
+      "background",
+      "backgroundInitiator",
+      "backgroundTerminalCompletion",
+      "blocking",
+      "callId",
+      "childPromptRefs",
+      "childSessionId",
+      "childSessionLogPath",
+      "children",
+      "commandId",
+      "commandText",
+      "controlStatus",
+      "cutOff",
+      "damagedRange",
+      "declaredPhase",
+      "deliveryNumber",
+      "depth",
+      "displayLabel",
+      "displayText",
+      "durationMs",
+      "earlierHistory",
+      "entryId",
+      "event",
+      "exitCode",
+      "exitSignal",
+      "failureKind",
+      "failureReason",
+      "fallbackText",
+      "finalSummary",
+      "generationId",
+      "held",
+      "heldFor",
+      "hookKey",
+      "itemId",
+      "jobId",
+      "kind",
+      "label",
+      "message",
+      "messagePhase",
+      "modelVisibleContent",
+      "monitorDescription",
+      "monitorId",
+      "nextFireAtMs",
+      "objective",
+      "outcome",
+      "outputRef",
+      "patchRef",
+      "patchSummary",
+      "paused",
+      "providerItemId",
+      "reason",
+      "recordedAt",
+      "reminderAgentId",
+      "replayHint",
+      "result",
+      "resumeFromRunId",
+      "retracted",
+      "revision",
+      "role",
+      "runStatus",
+      "scheduledFireAtMs",
+      "scriptId",
+      "sideSessionId",
+      "status",
+      "statusAttempt",
+      "statusChildren",
+      "statusHealth",
+      "statusLine",
+      "statusPhase",
+      "statusProgress",
+      "statusStep",
+      "steered",
+      "stopAvailable",
+      "strategyId",
+      "subagentId",
+      "summarizedThrough",
+      "summary",
+      "taskId",
+      "terminalRowAfterItemId",
+      "text",
+      "tokenBudget",
+      "tokensAfter",
+      "tokensBefore",
+      "tool",
+      "toolReceipt",
+      "trigger",
+      "triggerSource",
+      "truncated",
+      "turnId",
+      "usage",
+      "visibleOutput",
+      "wakeSourceDescriptions",
+      "workId",
+      "workflowRunId"
+     ]
+    },
+    "ItemCompletedParams": {
+     "digest": "187f3d23403a9404b17c8269ba1c0bfacf24074b9cff78a1de3e2198a13fda00",
+     "required": [
+      "item",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ],
+     "props": [
+      "item",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "ItemDeltaParams": {
+     "digest": "0adc20e0ec59ef30e8be05cb166613f0cc26491e86f0413aa949216025a9aba6",
+     "required": [
+      "delta",
+      "itemId",
+      "sessionId",
+      "viewCursor"
+     ],
+     "props": [
+      "delta",
+      "field",
+      "itemId",
+      "sessionId",
+      "viewCursor"
+     ]
+    },
+    "ItemKind": {
+     "digest": "53ce79c8558e2e4557c30ef128c1cfe8028bd862deff53fd00bd4503e4263cd3",
+     "required": null,
+     "props": null
+    },
+    "ItemReadOutputEncoding": {
+     "digest": "5f3fe87fb1965c889bab106b8a0b93417d48704f60d91a7f6500ffb5783964c0",
+     "required": null,
+     "props": null
+    },
+    "ItemReadOutputParams": {
+     "digest": "84ef1f53e0c31a177e9f7eb20230baaf09eaa8587b0304fb19c48e15b3cae63e",
+     "required": [
+      "itemId",
+      "outputRef",
+      "sessionId"
+     ],
+     "props": [
+      "itemId",
+      "lengthBytes",
+      "offsetBytes",
+      "outputRef",
+      "sessionId"
+     ]
+    },
+    "ItemReadOutputResult": {
+     "digest": "c83e47c3f0e1321895cb6462a49f175ee1a2e593f67b9845463260a219a983f5",
+     "required": [
+      "byteLen",
+      "content",
+      "encoding",
+      "eof",
+      "mediaType",
+      "offsetBytes"
+     ],
+     "props": [
+      "byteLen",
+      "content",
+      "encoding",
+      "eof",
+      "mediaType",
+      "offsetBytes"
+     ]
+    },
+    "ItemStartedParams": {
+     "digest": "8879577262e5c2b2975c4e758c359c551f8e8decefe25625261603844f1588e3",
+     "required": [
+      "item",
+      "sessionId",
+      "viewCursor"
+     ],
+     "props": [
+      "item",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "ItemStatus": {
+     "digest": "79842427d665f73432a264fdea903feffdc716a129bc96b039f67c56b24a007e",
+     "required": null,
+     "props": null
+    },
+    "ItemUpdatedParams": {
+     "digest": "1f7718f6bb615571fcd3650c90696d3ee183881537e1b48cd3b8aa30361c236a",
+     "required": [
+      "item",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ],
+     "props": [
+      "item",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "JsonRpcVersion": {
+     "digest": "58d4d745a1ba445f2e9ec36fdcc7924d2c85e7598a4e149b622f7557944cc4f0",
+     "required": null,
+     "props": null
+    },
+    "LastTurn": {
+     "digest": "9cc90603374e292911e2c3b1e52ae18086021cd7a2bb9910397f7e35ae51dbc6",
+     "required": [
+      "terminal",
+      "turnId"
+     ],
+     "props": [
+      "error",
+      "reason",
+      "terminal",
+      "turnId"
+     ]
+    },
+    "LimitKind": {
+     "digest": "c13e8db889083bf3dbc3bf386eb6e2f918493479c1cf67d0b769864ae8c62c06",
+     "required": null,
+     "props": null
+    },
+    "MediaUploadParams": {
+     "digest": "c7de388135fd2987a8a292087ebd97a964782939f9ad33506710d36a090e5b70",
+     "required": [
+      "chunkBase64",
+      "chunkCount",
+      "chunkIndex",
+      "commandId",
+      "mediaType",
+      "sessionId",
+      "totalBytes",
+      "uploadId"
+     ],
+     "props": [
+      "chunkBase64",
+      "chunkCount",
+      "chunkIndex",
+      "commandId",
+      "mediaType",
+      "sessionId",
+      "totalBytes",
+      "uploadId"
+     ]
+    },
+    "MediaUploadResult": {
+     "digest": "13b5e1c2a176c7e7e4a284831e29c01d999d04c697ec5a9283cdf742ec87d261",
+     "required": [
+      "uploadId"
+     ],
+     "props": [
+      "uploadId"
+     ]
+    },
+    "MessageAttachment": {
+     "digest": "8f3e5de613babc18f2dd6834ad717e57076c613e82f91a086c805b44f470a1ad",
+     "required": [
+      "mediaType",
+      "type"
+     ],
+     "props": [
+      "attachmentId",
+      "height",
+      "mediaType",
+      "type",
+      "width"
+     ]
+    },
+    "MessagePhase": {
+     "digest": "d1d8e42a8e49c86e3737fbaaf74ccdd0e66aa27998a77efaace300196bd4c20b",
+     "required": null,
+     "props": null
+    },
+    "ModelCatalogEntry": {
+     "digest": "5ae2a92938207b2cf0d86b63566731e2780a0fab8deb78cf5fa50e7f77874f99",
+     "required": [
+      "contextLimit",
+      "cost",
+      "description",
+      "displayLabel",
+      "isActive",
+      "isDefault",
+      "modelId",
+      "outputLimit",
+      "profileId",
+      "providerId",
+      "releaseDate"
+     ],
+     "props": [
+      "contextLimit",
+      "cost",
+      "defaultReasoningEffort",
+      "description",
+      "displayLabel",
+      "isActive",
+      "isDefault",
+      "modelId",
+      "outputLimit",
+      "profileId",
+      "providerId",
+      "reasoningEffortVariants",
+      "releaseDate",
+      "variants"
+     ]
+    },
+    "ModelCatalogSource": {
+     "digest": "5d7037f955363fcab0b94b78b82ffb59614ff9a8e95eff4c557053876ee0e48b",
+     "required": null,
+     "props": null
+    },
+    "ModelChangeSource": {
+     "digest": "58bbcbeb94f3359826485c8387bbaa0e8123187689918b29c8139b5e1b2fd1e2",
+     "required": null,
+     "props": null
+    },
+    "ModelCost": {
+     "digest": "e60ba11b219ee7eddb21fc286e224321191fcb13bc55c2f42909223dcf95922a",
+     "required": [
+      "cached",
+      "currency",
+      "input",
+      "output"
+     ],
+     "props": [
+      "cached",
+      "currency",
+      "input",
+      "output"
+     ]
+    },
+    "ModelDescribedReasoningEffort": {
+     "digest": "ac98392c0a5358a43489ddf8379790481ce2b249a3030e10301114bc93b66e4c",
+     "required": [
+      "tier"
+     ],
+     "props": [
+      "description",
+      "tier"
+     ]
+    },
+    "ModelListParams": {
+     "digest": "265117688377837a1bf573fc9df6f15349fedded58d216a709319a74f12a55f3",
+     "required": null,
+     "props": [
+      "sessionId"
+     ]
+    },
+    "ModelListResult": {
+     "digest": "358275a5cdb489dcb75d14a6cae2da4b7d01735ba1873f09eae01b85883961b5",
+     "required": [
+      "models",
+      "profileId",
+      "providerId",
+      "source"
+     ],
+     "props": [
+      "models",
+      "profileId",
+      "providerId",
+      "source"
+     ]
+    },
+    "ModelReasoningEffortVariants": {
+     "digest": "52829fe77d57b94b33a502bca1475d973fa9dc0ed5065a23ea6e9432d45fac50",
+     "required": null,
+     "props": null
+    },
+    "ModelSelection": {
+     "digest": "2962cafbccb1062a05453320b9c4b92bca2e5ed2b54c8918a0fe4adf66877633",
+     "required": [
+      "modelId"
+     ],
+     "props": [
+      "displayLabel",
+      "modelId",
+      "profileId",
+      "providerId"
+     ]
+    },
+    "ModelVisibleContent": {
+     "digest": "6c163e9d3955f474ed24420613e24c17d54a7d469ba7a640fc1114f1a24a75e7",
+     "required": [
+      "mediaType",
+      "path",
+      "sourceToolName",
+      "type"
+     ],
+     "props": [
+      "height",
+      "mediaType",
+      "path",
+      "sourceToolName",
+      "type",
+      "width"
+     ]
+    },
+    "MonitorInboxItemAdmittedParams": {
+     "digest": "d6a9aba5279ed68f52b960c0765af20c106e70d5331209d5d18c225fe623f168",
+     "required": [
+      "body",
+      "eventIndex",
+      "eventKind",
+      "itemId",
+      "queuedAt",
+      "sessionId",
+      "showLines",
+      "sourceRange",
+      "summary",
+      "taskId",
+      "viewCursor"
+     ],
+     "props": [
+      "body",
+      "displayBody",
+      "eventIndex",
+      "eventKind",
+      "itemId",
+      "lineIndex",
+      "queuedAt",
+      "sessionId",
+      "showLines",
+      "sourceRange",
+      "summary",
+      "taskId",
+      "viewCursor"
+     ]
+    },
+    "MonitorInboxItemDrainedParams": {
+     "digest": "24ce2330bcc7d5c0d948e1751fb678e7059c21c1e1b7bb80ab8b16485820409b",
+     "required": [
+      "deliveryVisible",
+      "drainedAt",
+      "itemId",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ],
+     "props": [
+      "deliveryVisible",
+      "drainTargetRunStream",
+      "drainedAt",
+      "itemId",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "MonitorInboxItemVoidedParams": {
+     "digest": "002710c3c684f147259fcfc8f228a8eb5c79f3785996f6d30dd120c683150372",
+     "required": [
+      "itemId",
+      "sessionId",
+      "sourceRange",
+      "viewCursor",
+      "voidedAt"
+     ],
+     "props": [
+      "itemId",
+      "sessionId",
+      "sourceRange",
+      "viewCursor",
+      "voidedAt"
+     ]
+    },
+    "Notification": {
+     "digest": "cff06dbc95e4ca52f3b55e823c129f33a503673c53eff6b8a6abd88e80cdeda5",
+     "required": [
+      "jsonrpc",
+      "method"
+     ],
+     "props": [
+      "emittedAtMs",
+      "jsonrpc",
+      "method",
+      "params"
+     ]
+    },
+    "OutputRef": {
+     "digest": "b007ba9e8144fb731ca87b54bdf019c3b5ddd46b65dfe4a959b90de568304ea8",
+     "required": [
+      "availability",
+      "byteLen",
+      "id",
+      "kind",
+      "uri"
+     ],
+     "props": [
+      "availability",
+      "byteLen",
+      "digest",
+      "id",
+      "kind",
+      "mediaType",
+      "path",
+      "uri"
+     ]
+    },
+    "OutputRefAvailability": {
+     "digest": "caf957637c09c8f78248bc092911f0928b0876250457a041e0e532fe39dee5a1",
+     "required": null,
+     "props": null
+    },
+    "PatchSummary": {
+     "digest": "fc8f82348a22a920e4cababbf3188b333a3cd9168ff5fa2aad887476ea3195cd",
+     "required": [
+      "added",
+      "files",
+      "removed"
+     ],
+     "props": [
+      "added",
+      "files",
+      "removed"
+     ]
+    },
+    "PendingApprovalPointer": {
+     "digest": "3363e3922465c8bebdac35de13cd6bee445e3d51681b6de5570f9993eb5022e8",
+     "required": [
+      "approvalId",
+      "viewCursor"
+     ],
+     "props": [
+      "approvalId",
+      "itemId",
+      "viewCursor"
+     ]
+    },
+    "PendingRequestKind": {
+     "digest": "f08398c7639b1ce275930f53052ff0a6ab8ba81381874d5d87d8ea1ff7b51740",
+     "required": null,
+     "props": null
+    },
+    "PendingRequestPointer": {
+     "digest": "ee1141927d64e474367600ac2c1e8b1c44ed05b22b42fefde82b514f934cd7b5",
+     "required": [
+      "kind",
+      "viewCursor"
+     ],
+     "props": [
+      "approvalId",
+      "kind",
+      "userInputId",
+      "viewCursor"
+     ]
+    },
+    "PendingUserInputPointer": {
+     "digest": "c75fd4a26fd247cd82ec5e367a398a7098c5bb76b7f5fcaacd57c7c332baee35",
+     "required": [
+      "userInputId",
+      "viewCursor"
+     ],
+     "props": [
+      "itemId",
+      "userInputId",
+      "viewCursor"
+     ]
+    },
+    "PlatformFamily": {
+     "digest": "50e33d5113463e10a0fa430e5da11b8d2caf627fc9ad67ffdd1d5f13f63d9902",
+     "required": null,
+     "props": null
+    },
+    "PlatformOs": {
+     "digest": "8a32ba7d965f2b8070e4983078013c4ee6ce67a442a25f614c7854cba67277fc",
+     "required": null,
+     "props": null
+    },
+    "PluginCatalogEntry": {
+     "digest": "9741c0b01a381f3f50fb029c8009827050644c78e2f5f3af89f96078970fc253",
+     "required": [
+      "enabled",
+      "id",
+      "source",
+      "version"
+     ],
+     "props": [
+      "enabled",
+      "id",
+      "source",
+      "version"
+     ]
+    },
+    "PluginChangedParams": {
+     "digest": "804306d46eadaf5a8cd71fdbb7581e7fbcf44bc9505f4b00b9e06bcab66ef25d",
+     "required": [
+      "enabled",
+      "id",
+      "sessionId",
+      "source",
+      "version"
+     ],
+     "props": [
+      "enabled",
+      "id",
+      "sessionId",
+      "source",
+      "version"
+     ]
+    },
+    "PluginInstallLocalPathTarget": {
+     "digest": "530dbd9a11ca1855e723f2d5c43b85783f8e82651538799c5422cff9beb7b3cd",
+     "required": [
+      "path"
+     ],
+     "props": [
+      "path",
+      "scope"
+     ]
+    },
+    "PluginInstallMarketplaceTarget": {
+     "digest": "6e5db3474b9a2478c64ac7994f5241c36ab7c399814b818ed7990ff6c3021e60",
+     "required": [
+      "marketplace",
+      "name"
+     ],
+     "props": [
+      "marketplace",
+      "name"
+     ]
+    },
+    "PluginInstallParams": {
+     "digest": "816d6b1abaffbb9f93c23942412edfe6f1711d35ce22c2ee6ca2e3243f15d6af",
+     "required": [
+      "commandId",
+      "sessionId",
+      "target"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "target"
+     ]
+    },
+    "PluginInstallResult": {
+     "digest": "17f718f3102f84fbfb6d1ffaf6430ad526ba17dcd4aa2168194898556156b98c",
+     "required": [
+      "commandId",
+      "enabled",
+      "id",
+      "source",
+      "status",
+      "version"
+     ],
+     "props": [
+      "commandId",
+      "enabled",
+      "id",
+      "source",
+      "status",
+      "version",
+      "warning"
+     ]
+    },
+    "PluginInstallScope": {
+     "digest": "49e8a6fbddf20b6439b17abcab8e4e8e1790a000544af574b7ab36643fa2aecf",
+     "required": null,
+     "props": null
+    },
+    "PluginInstallTarget": {
+     "digest": "1b9b83bfcc6ed7e5eb70318d31b240a7d6c4e463b5691ce6905b4fed28b5c2a3",
+     "required": null,
+     "props": [
+      "localPath",
+      "marketplace"
+     ]
+    },
+    "PluginListParams": {
+     "digest": "d12586afb305455c59eca80a23711b81f4ebfd7824562192ae4ef3eac8af04f6",
+     "required": [
+      "sessionId"
+     ],
+     "props": [
+      "sessionId"
+     ]
+    },
+    "PluginListResult": {
+     "digest": "4b162c712f969e1baf9245b35c93f0705ac84b46fc36b2f7fa8e9a2ed8717160",
+     "required": [
+      "plugins"
+     ],
+     "props": [
+      "plugins"
+     ]
+    },
+    "PluginMarketplaceAddParams": {
+     "digest": "ad86da211961d6bc8abeb27e231dd57e7d902c110fdad69ced8b595516174ce3",
+     "required": [
+      "commandId",
+      "name",
+      "sessionId",
+      "source"
+     ],
+     "props": [
+      "commandId",
+      "name",
+      "sessionId",
+      "source"
+     ]
+    },
+    "PluginMarketplaceChange": {
+     "digest": "29b742593d87a0abf22ae1acf2c2912864237c88741fe5693a9fd3b09bf9b3b5",
+     "required": null,
+     "props": null
+    },
+    "PluginMarketplaceChangedParams": {
+     "digest": "d8e071a2f5880bc1721c2ef48391f722522664f76b658eb1d69f8469138fa0f3",
+     "required": [
+      "change",
+      "name",
+      "sessionId"
+     ],
+     "props": [
+      "change",
+      "name",
+      "pluginCount",
+      "sessionId",
+      "skippedCount"
+     ]
+    },
+    "PluginMarketplaceRecordResult": {
+     "digest": "cab7d649f1b9174895629eb10f114c6e109b391e5fd706822418a6c852940929",
+     "required": [
+      "commandId",
+      "name",
+      "pluginCount",
+      "skipped",
+      "source",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "name",
+      "pluginCount",
+      "skipped",
+      "source",
+      "status"
+     ]
+    },
+    "PluginMarketplaceRemoveParams": {
+     "digest": "3319ab39a25140bb153d0f09e7561dd23914486d734ab806f0d6a8146a569b6a",
+     "required": [
+      "commandId",
+      "name",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "name",
+      "sessionId"
+     ]
+    },
+    "PluginMarketplaceRemoveResult": {
+     "digest": "60ec922ca2e264053e8fb6c9e2e7b01b717db109bed5ca2c99b9b0f0087996be",
+     "required": [
+      "commandId",
+      "name",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "name",
+      "status"
+     ]
+    },
+    "PluginMarketplaceSkippedEntry": {
+     "digest": "432cab46d8e2c74a8f6fde17a56c7863c75fe801ac8528ce783c8e38c9dd106e",
+     "required": [
+      "plugin",
+      "reason"
+     ],
+     "props": [
+      "plugin",
+      "reason"
+     ]
+    },
+    "PluginMarketplaceSourceShape": {
+     "digest": "95e66585ab9e7ec8eeb33aedebbd9dfedde2019c9c462640c91b5b8427bbc8d1",
+     "required": [
+      "kind",
+      "path"
+     ],
+     "props": [
+      "kind",
+      "path"
+     ]
+    },
+    "PluginMarketplaceUpdateParams": {
+     "digest": "4cf395bc2bfd3823dd446686726f769d3e6c9839cf98950dd6f2930f6902470b",
+     "required": [
+      "commandId",
+      "name",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "name",
+      "sessionId"
+     ]
+    },
+    "PluginSource": {
+     "digest": "61a4b0b06a1bf787e2d84898209329f4fe815ccd1457cb0ec2de94a61648af81",
+     "required": null,
+     "props": null
+    },
+    "QueuedInput": {
+     "digest": "1004c302f3b9f87da2419784c15efaf88f2b8b36c4fc5afe624823e2a70773e7",
+     "required": [
+      "sequence",
+      "text"
+     ],
+     "props": [
+      "sequence",
+      "sourceCommandId",
+      "sourceRunRecordId",
+      "text"
+     ]
+    },
+    "QuotaDetail": {
+     "digest": "28ec12598935a3a1faedc281249acce71d1a2746efbc317cb48339dd0a66b7a4",
+     "required": [
+      "limitKind",
+      "resetsAtMs"
+     ],
+     "props": [
+      "limitKind",
+      "resetsAtMs"
+     ]
+    },
+    "ReasoningEffort": {
+     "digest": "c0cbe5fcdce4b0803c281fa0e3cb420dae2c651fe8ad127b0044fb383b4b04e0",
+     "required": null,
+     "props": null
+    },
+    "ReasoningEffortChangeSource": {
+     "digest": "96e3dec370706ea5fcbf3cdcc817538365aaa11e10edb8519f1232aaf5fdb467",
+     "required": null,
+     "props": null
+    },
+    "ReasoningEffortState": {
+     "digest": "fa15e379d43b7e9e948c4bd2add73994f3e6e061fb0bdedfd1fa0d23a60f8c5a",
+     "required": [
+      "reasoningEffort",
+      "source"
+     ],
+     "props": [
+      "reasoningEffort",
+      "source"
+     ]
+    },
+    "RecapCancelParams": {
+     "digest": "8b84e4715104270d72737c599f75b5112e909faffbe095cc10e03f937e93a371",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId"
+     ]
+    },
+    "RecapCancelResult": {
+     "digest": "e441e38bc4a3e4d9498548946dbaaebb95f2138eeb1c17da14b353fd1728bed5",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "status"
+     ]
+    },
+    "RecapCompletedParams": {
+     "digest": "21d944bc5b2e3dea25ed0f7cfba55fe5f9b7f625ada3e2a7c54c5740595d9e14",
+     "required": [
+      "commandId",
+      "outcome",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "outcome",
+      "reason",
+      "sessionId",
+      "text",
+      "title"
+     ]
+    },
+    "RecapFailureReason": {
+     "digest": "a26d4badd6ed37d03ff7a44a1c9b85de6471feba9841fb31782baad30d8ecf49",
+     "required": null,
+     "props": null
+    },
+    "RecapOutcome": {
+     "digest": "c45929fc1f8cf7065636351a7684e0a274bbf45fb0e25e6ac2962d0f3af6c37a",
+     "required": null,
+     "props": null
+    },
+    "RecapRequestParams": {
+     "digest": "8e1ce1da67aa2e4ae3bb1482d0ef992bc5588103a0b45fca8adf79806729169c",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId"
+     ]
+    },
+    "RecapRequestResult": {
+     "digest": "8b9db5294ffe246a764fc3745bbaf73930467b62b1b66bc039bc027cfe0d4dce",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "status"
+     ]
+    },
+    "RecordPosition": {
+     "digest": "75ab18d7ba625d1db18a7b0af4354f5615d88d5b51918f240ce0793828c64a57",
+     "required": [
+      "id",
+      "sequence"
+     ],
+     "props": [
+      "id",
+      "sequence"
+     ]
+    },
+    "RecoveryEffectiveSource": {
+     "digest": "3d5be89dd0cb2887922a1147c1f504fac0be400b8aba73aa84123f803b54cdc2",
+     "required": null,
+     "props": null
+    },
+    "RecoveryMode": {
+     "digest": "74dc2e2900a180dab440d687aa8fb52c617f3d6e6a02824530fc141d207e0648",
+     "required": null,
+     "props": null
+    },
+    "RecoveryObservation": {
+     "digest": "cd3e8bce561eea16032fd14989be9fbe45b6cc45ad6d02825e9f90ef81326af6",
+     "required": [
+      "constructionId",
+      "effectiveMode",
+      "effectiveSource",
+      "qualification",
+      "requestedMode",
+      "sessionId"
+     ],
+     "props": [
+      "constructionId",
+      "effectiveMode",
+      "effectiveSource",
+      "qualification",
+      "requestedMode",
+      "sessionId"
+     ]
+    },
+    "RecoveryObservedMode": {
+     "digest": "8f76996808469fc35c2382f158f5f9b87d74d45927e24c4ea4a0453bf89f374a",
+     "required": null,
+     "props": null
+    },
+    "RecoveryQualification": {
+     "digest": "368d738e62cdae37606a4c3052fe2cf59e5b7f05b0d7444140714ddb3f68623d",
+     "required": null,
+     "props": null
+    },
+    "ReplayHint": {
+     "digest": "4efee64e6b279616faadf1cdcd2bef9b7e1c8880d7100f11dcc895ad17c6f408",
+     "required": [
+      "afterItemId",
+      "rowKinds"
+     ],
+     "props": [
+      "afterItemId",
+      "rowKinds"
+     ]
+    },
+    "Request": {
+     "digest": "95d3d11cd5b32cc103f470790a36a23a5bd06d9e4bdbe4661a2f467cd6de87f7",
+     "required": [
+      "id",
+      "jsonrpc",
+      "method"
+     ],
+     "props": [
+      "id",
+      "jsonrpc",
+      "method",
+      "params",
+      "trace"
+     ]
+    },
+    "RequestId": {
+     "digest": "df35d692b77d82e9020eaa15331a8387131e22c4d8d313c851e020be01af1e97",
+     "required": null,
+     "props": null
+    },
+    "RequestReceipt": {
+     "digest": "b5f91151b6c18c4b06f8d7b9306d94bf4ec504081f69685a9c1b00232af11575",
+     "required": null,
+     "props": []
+    },
+    "RetractOutcome": {
+     "digest": "95e65fd60efe9dccc1138f9057349f3f7a15e9036915e3173f8ec58edeecf1bd",
+     "required": null,
+     "props": null
+    },
+    "RuntimeWorktree": {
+     "digest": "7d3ab92722c6a1ba8de192d18757caec0f148f1e71e270c69dd13c3bcd4da574",
+     "required": [
+      "baseCommit",
+      "cleanupPolicy",
+      "cleanupState",
+      "headCommit",
+      "ownership",
+      "parentDirtyExcluded",
+      "worktreeRoot"
+     ],
+     "props": [
+      "baseCommit",
+      "cleanupPolicy",
+      "cleanupState",
+      "headCommit",
+      "ownership",
+      "parentDirtyExcluded",
+      "worktreeRoot"
+     ]
+    },
+    "RuntimeWorktreeCleanupPolicy": {
+     "digest": "4d012f72f4de1c322d6ab44c1835f59e89882f2735802e5464597ee2970ea5e0",
+     "required": null,
+     "props": null
+    },
+    "RuntimeWorktreeCleanupState": {
+     "digest": "718734470d85f4d538411103b90e803ca872338b5fb15385a4df0d26499ba4c1",
+     "required": null,
+     "props": null
+    },
+    "RuntimeWorktreeOwnership": {
+     "digest": "e0be8a64f682e198d92a86def121318f321f77200ef98b1fd9b614c65a431f9a",
+     "required": null,
+     "props": null
+    },
+    "SandboxAvailability": {
+     "digest": "a822c1657f65b15c7da13942b36ca76aa63dd7f35fced28438934fffcf238021",
+     "required": null,
+     "props": null
+    },
+    "SandboxUnavailableReason": {
+     "digest": "01b5691c31075ec43d3be05ae5727cff70cfc8e9cb60c655bfa189a363a9561e",
+     "required": null,
+     "props": null
+    },
+    "SchemaInfo": {
+     "digest": "614d59c2554d2c81f4f4cc53df9da2ea04a31935be1b765224b34057101c215d",
+     "required": [
+      "fingerprint",
+      "version"
+     ],
+     "props": [
+      "fingerprint",
+      "version"
+     ]
+    },
+    "ServerInfo": {
+     "digest": "8b0a215d66a0dc80fa4637d36aafb33e9f130293c0b9e72e8560fd4b46ccd670",
+     "required": [
+      "name",
+      "version"
+     ],
+     "props": [
+      "name",
+      "version"
+     ]
+    },
+    "Session": {
+     "digest": "09444c4ec9d592370ac90e1ad950a172d065b8495d9a9c3fa972a42af46f7d78",
+     "required": [
+      "activeTurnId",
+      "createdAt",
+      "forkedFrom",
+      "modelId",
+      "path",
+      "providerId",
+      "sessionId",
+      "status",
+      "turnCount",
+      "updatedAt",
+      "workspaceRoot"
+     ],
+     "props": [
+      "activeTurnId",
+      "approvalMode",
+      "attention",
+      "branch",
+      "createdAt",
+      "createdByClient",
+      "driveHolder",
+      "firstUserPrompt",
+      "forkedFrom",
+      "generatedName",
+      "itemCount",
+      "kind",
+      "lastActivityAt",
+      "logBytes",
+      "modelId",
+      "name",
+      "nameOrigin",
+      "parentSessionId",
+      "path",
+      "providerId",
+      "resumedByClient",
+      "sessionId",
+      "sideFrom",
+      "spawnedBy",
+      "status",
+      "title",
+      "turnCount",
+      "updatedAt",
+      "workspaceRoot"
+     ]
+    },
+    "SessionApprovalModeChangedParams": {
+     "digest": "a422befc346a0ae5f93ceb70d85ffcbdf09c54b0b61b362690773cc535d5d88f",
+     "required": [
+      "clientName",
+      "commandId",
+      "mode",
+      "sessionId",
+      "source",
+      "sourceRange",
+      "viewCursor"
+     ],
+     "props": [
+      "clientName",
+      "commandId",
+      "mode",
+      "sessionId",
+      "source",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "SessionBranchChangedParams": {
+     "digest": "a5c5006a90480961a8531dfa0ea90a72f7640fa5b8b0ec735b8b5a0c626111d6",
+     "required": [
+      "branch",
+      "sessionId",
+      "sourceRange",
+      "viewCursor",
+      "workspaceRoot"
+     ],
+     "props": [
+      "branch",
+      "sessionId",
+      "sourceRange",
+      "vcs",
+      "viewCursor",
+      "workspaceRoot"
+     ]
+    },
+    "SessionClosedParams": {
+     "digest": "6b0ea183e3dec47b86e3fb924debafaea6b8dc107f507e97bfd42dbde187ea60",
+     "required": [
+      "reason",
+      "sessionId",
+      "viewCursor"
+     ],
+     "props": [
+      "reason",
+      "sessionId",
+      "viewCursor"
+     ]
+    },
+    "SessionClosedReason": {
+     "digest": "dc5c4aedcc971a22fa467a10dec3f2aa6fb3ddb0da9b41b1120a4dd2be577111",
+     "required": null,
+     "props": null
+    },
+    "SessionCompactParams": {
+     "digest": "54ad4de3b2c9d43b233baf448577b2b9c5d44fdc4acd39cc8f16a8bab1f6a5c8",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "turnId"
+     ]
+    },
+    "SessionCompactResult": {
+     "digest": "2cd93192ffacb327704e61f8cea74d9bb76c99f702cd97afc064423911b22ef4",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "reason",
+      "status"
+     ]
+    },
+    "SessionConfig": {
+     "digest": "6295f252b48947ca29fc51d7dfe0711ff08f91c7e40a07592313f508617c39da",
+     "required": null,
+     "props": [
+      "mcpServers"
+     ]
+    },
+    "SessionContextUsageParams": {
+     "digest": "02967e7104cb21e4054c4e9d36ad5b141a1f52ff0a0dc499e5abfc4d268c60f7",
+     "required": [
+      "pressure",
+      "sessionId",
+      "sourceRange",
+      "usedTokens",
+      "viewCursor"
+     ],
+     "props": [
+      "pressure",
+      "sessionId",
+      "sourceRange",
+      "usedTokens",
+      "viewCursor",
+      "windowTokens"
+     ]
+    },
+    "SessionDurability": {
+     "digest": "1452b4fab224afa74d0f612f3d68ada260e75080e344697d123c20b3c6010d5b",
+     "required": null,
+     "props": null
+    },
+    "SessionForkParams": {
+     "digest": "159c7e5f702423a6b1df8698a96499fcb2bc1e9af14c726b2116ac505e95acfb",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "cutPoint",
+      "excludeItems",
+      "sessionId"
+     ]
+    },
+    "SessionForkResult": {
+     "digest": "274ce425680f28abefc0560eab5c9fc88eaa7c496edf6eba424921bd68b6f870",
+     "required": [
+      "history",
+      "pendingRequests",
+      "session",
+      "viewCursor"
+     ],
+     "props": [
+      "history",
+      "pendingRequests",
+      "session",
+      "viewCursor"
+     ]
+    },
+    "SessionGoalChangedParams": {
+     "digest": "a8d75beba7f4ea66ce2a9f76c415dcfc21dfdbf5bbfffa67108b572ed0c8c9d7",
+     "required": [
+      "goal",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ],
+     "props": [
+      "goal",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "SessionHistory": {
+     "digest": "a3a3f2787bf71fc7b220216a3c4861dfb3b9f493070281566f0f5efbe8c31eb3",
+     "required": [
+      "items",
+      "mode",
+      "snapshot"
+     ],
+     "props": [
+      "checkpointBoundary",
+      "items",
+      "mode",
+      "noneReason",
+      "snapshot"
+     ]
+    },
+    "SessionKind": {
+     "digest": "802ff095bff9b37fd0e3596e0d9c8a485f8ef03b0ca526f060d9259636b7d215",
+     "required": null,
+     "props": null
+    },
+    "SessionLeaveCompletedParams": {
+     "digest": "726022439ba9a1ecba729f59fc5022faca47cc9eacbc6c093d9e71f73196dad6",
+     "required": [
+      "commandId",
+      "outcome",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "outcome",
+      "reason",
+      "sessionId",
+      "viewCursor"
+     ]
+    },
+    "SessionLeaveFailureReason": {
+     "digest": "374227e3f9542fb6273ed86aad61381ac6be451ee4da062c17a962fa135263b1",
+     "required": null,
+     "props": null
+    },
+    "SessionLeaveOutcome": {
+     "digest": "55331d663d4bcda71086f2a544129b9b1bd0f7084be539ff1287197266ca3a0e",
+     "required": null,
+     "props": null
+    },
+    "SessionLeaveParams": {
+     "digest": "3a8d23ed76971ae51023ef89c46611603f3bc96d75fae81e56051a4a6bcb7c82",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "stop"
+     ]
+    },
+    "SessionLeaveResult": {
+     "digest": "42a75e9fad06ff3eaf6aa2b4739e1c478d85f220f4cd6e22128777ec9b458d50",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "status"
+     ]
+    },
+    "SessionListBranchFilter": {
+     "digest": "ada628221ff82e9eca5bee894acb32598cbda64497302ccf4c3c8163b3675db9",
+     "required": [
+      "anyOf"
+     ],
+     "props": [
+      "anyOf"
+     ]
+    },
+    "SessionListChangedParams": {
+     "digest": "d7d43de26183703d1e4383de657bc3bcae58c7f613b07065d9f02db665242606",
+     "required": [
+      "session"
+     ],
+     "props": [
+      "session"
+     ]
+    },
+    "SessionListFilter": {
+     "digest": "30903811b85f3c5aed2a874cd5b60414effad327ed30021b08f9049608ab62e6",
+     "required": null,
+     "props": [
+      "branch",
+      "sessionId",
+      "text"
+     ]
+    },
+    "SessionListParams": {
+     "digest": "84b069c2a118016769e2d529624a60a661a25cde18f7f6a91687a8fdabc1a382",
+     "required": null,
+     "props": [
+      "cursor",
+      "filter",
+      "limit",
+      "updatedAfter",
+      "workspaceRoot"
+     ]
+    },
+    "SessionListResult": {
+     "digest": "710e80136b289f255637fa8bee40739b397dec64b12da06e516bce2649562ff5",
+     "required": [
+      "nextCursor",
+      "sessions"
+     ],
+     "props": [
+      "appliedFilter",
+      "nextCursor",
+      "sessions"
+     ]
+    },
+    "SessionListSessionIdFilter": {
+     "digest": "cd517600064a722eb0f6d36f20114cea50359100ca83bb20bae5dca77366e6e7",
+     "required": [
+      "anyOf"
+     ],
+     "props": [
+      "anyOf"
+     ]
+    },
+    "SessionListTextField": {
+     "digest": "9489268be03ef2fc7c61cda43849c6779ee0109134ef7cc60c84cc069bb4fc4b",
+     "required": null,
+     "props": null
+    },
+    "SessionListTextFilter": {
+     "digest": "338978492e9101d5769cd48a2e22a062f2daddc81e24f6f5b0dcd239470e9dd3",
+     "required": [
+      "fields"
+     ],
+     "props": [
+      "allOf",
+      "anyOf",
+      "fields"
+     ]
+    },
+    "SessionMcpServerConfig": {
+     "digest": "d768a483d510597e1e4465a4fc5c9b09c6944c7f24d6fab27fb8063e558dac07",
+     "required": null,
+     "props": null
+    },
+    "SessionMcpServerMode": {
+     "digest": "1a6929e84e8c6311fba6ce0e64dcf68d8b3dd96d16feaf59c03ff20f0fde062c",
+     "required": null,
+     "props": null
+    },
+    "SessionMcpStdioFraming": {
+     "digest": "4576e6589e42ed2575a455ccf1bd11531e9f1ccd53b1db773ac0e6a70bfca27f",
+     "required": null,
+     "props": null
+    },
+    "SessionModelChangedParams": {
+     "digest": "944c57f0a05e91daf878d385790899c8864a2aef4051556ebdda854e4dc21e43",
+     "required": [
+      "modelId",
+      "providerId",
+      "sessionId",
+      "source",
+      "sourceRange",
+      "viewCursor"
+     ],
+     "props": [
+      "modelId",
+      "providerId",
+      "sessionId",
+      "source",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "SessionModelRouteUnservedParams": {
+     "digest": "e222cbb20ca74bf76159b600c08210f4105bbf5e1a1d45d1b515018cbb04e1c3",
+     "required": [
+      "commandId",
+      "installedProviderId",
+      "modelId",
+      "providerId",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ],
+     "props": [
+      "commandId",
+      "installedProviderId",
+      "modelId",
+      "providerId",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "SessionNameChangedParams": {
+     "digest": "f12dd4c93e3866371d9e2362f3bb2304594d56b25ea07c4ad587793644ec81a1",
+     "required": [
+      "name",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ],
+     "props": [
+      "generatedName",
+      "name",
+      "nameOrigin",
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "SessionNameOrigin": {
+     "digest": "df355b479407b7720adeba9880a68d82c2e741eb8058e96567973608e8f41bcb",
+     "required": null,
+     "props": null
+    },
+    "SessionReadParams": {
+     "digest": "a5647bd75bbbbf070c61460cd9c2e9535f5f0f27bc70ba031e1ca58f7a75e91a",
+     "required": [
+      "sessionId"
+     ],
+     "props": [
+      "excludeItems",
+      "sessionId"
+     ]
+    },
+    "SessionReadResult": {
+     "digest": "eb72ac6cb35b2c000a1e2388f55ebdfe8e5dccd9a48fed19759427e0e383509d",
+     "required": [
+      "history",
+      "pendingRequests",
+      "session",
+      "viewCursor"
+     ],
+     "props": [
+      "blockedPrompt",
+      "history",
+      "lastTurn",
+      "pendingRequests",
+      "queuedInputs",
+      "recoveryObservation",
+      "session",
+      "viewCursor",
+      "worktree"
+     ]
+    },
+    "SessionReasoningEffortChangedParams": {
+     "digest": "3ab8f69b57bc7c74bd05baf591da0574135e5e4f8e9516dfd2a0d8a6bcfa68b1",
+     "required": [
+      "reasoningEffort",
+      "sessionId",
+      "source",
+      "sourceRange",
+      "viewCursor"
+     ],
+     "props": [
+      "reasoningEffort",
+      "sessionId",
+      "source",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "SessionRenameParams": {
+     "digest": "977f1b7f3f7d1f80ffbc839d3550be20e752475541bb5ef3a2098679336e430c",
+     "required": [
+      "commandId",
+      "name",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "name",
+      "sessionId"
+     ]
+    },
+    "SessionRenameResult": {
+     "digest": "882e178a8e55d3d6d1a03bfc7f2e6f73b079a9194920d6d67b6889391907e3e7",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "name",
+      "status"
+     ]
+    },
+    "SessionResumeParams": {
+     "digest": "9189bc186d71a9f36f2cac758e3898d4bfc05962042e8268b64b63c613fedc21",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "config",
+      "cursor",
+      "excludeItems",
+      "history",
+      "modelId",
+      "permissionProfile",
+      "recoveryMode",
+      "sessionId"
+     ]
+    },
+    "SessionResumeResult": {
+     "digest": "b2b15e750e6a56e9c67eaee41b0ff8bb190c03657c11f699ec79bf70290d4125",
+     "required": [
+      "history",
+      "pendingRequests",
+      "session",
+      "viewCursor"
+     ],
+     "props": [
+      "blockedPrompt",
+      "history",
+      "lastTurn",
+      "pendingRequests",
+      "session",
+      "viewCursor"
+     ]
+    },
+    "SessionSetApprovalModeParams": {
+     "digest": "23b5ed10201579b2fe16987d50e71994ddd7c262aa36339a1cc02188221a210a",
+     "required": [
+      "commandId",
+      "mode",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "mode",
+      "sessionId"
+     ]
+    },
+    "SessionSetApprovalModeResult": {
+     "digest": "b321fa55ef16ff85ee9012ce6a12088f786aa72ebeb3178adb36bd1c28aa294a",
+     "required": [
+      "applyOutcome",
+      "commandId",
+      "effectiveMode",
+      "status"
+     ],
+     "props": [
+      "applyOutcome",
+      "commandId",
+      "effectiveMode",
+      "status"
+     ]
+    },
+    "SessionSetModelParams": {
+     "digest": "805404b106d16bee1ca5ad0b90dcada2b3d6d48a6c7596c091102151f49fddaf",
+     "required": [
+      "commandId",
+      "model",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "model",
+      "sessionId"
+     ]
+    },
+    "SessionSetModelResult": {
+     "digest": "11a5b3a97ebcceccbbee1338d4b0488ab6295a98cdcc8cfcfea15fbaa0ec5284",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "status"
+     ]
+    },
+    "SessionSetReasoningEffortParams": {
+     "digest": "e5353640f2f1b9c26be802d3caea5c27bb6b1bd374eaf2e4ae28f430f0cc9f94",
+     "required": [
+      "commandId",
+      "reasoningEffort",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "reasoningEffort",
+      "sessionId"
+     ]
+    },
+    "SessionSetReasoningEffortResult": {
+     "digest": "b23733714dd903de902fba0e0e9a2ee3d6fd990b53117ba94871dc6bcc171768",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "status"
+     ]
+    },
+    "SessionSideChatParams": {
+     "digest": "71cee6c8bfec36c790a86bf8239b8e57d74ce2d009db0d44ca252ed07555b70e",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId"
+     ]
+    },
+    "SessionSideChatResult": {
+     "digest": "bc3e2d9d2656afb50ecf09e59bcad23e6813491d46f59e527efe83e8a39fc1db",
+     "required": [
+      "history",
+      "pendingRequests",
+      "session",
+      "viewCursor"
+     ],
+     "props": [
+      "history",
+      "pendingRequests",
+      "session",
+      "viewCursor"
+     ]
+    },
+    "SessionSpawnedBy": {
+     "digest": "b3f2e73a640448afdacb413552392f0f616bbffe2c5994ef89d2e6396516e0d9",
+     "required": [
+      "parentSessionId"
+     ],
+     "props": [
+      "parentSessionId",
+      "project",
+      "thread"
+     ]
+    },
+    "SessionStartParams": {
+     "digest": "c866354edfceb6efa050040b86a37546343e90377678293577ba9d782eb892b3",
+     "required": [
+      "commandId"
+     ],
+     "props": [
+      "approvalMode",
+      "commandId",
+      "config",
+      "modelId",
+      "permissionProfile",
+      "previousSessionId",
+      "providerId",
+      "recoveryMode",
+      "sessionId",
+      "spawnedBy",
+      "workspaceRoot",
+      "workspaceRoots"
+     ]
+    },
+    "SessionStartResult": {
+     "digest": "bfaa8cdae48b9f73ef10ea20638ef7e7050a663885157227848316ab1255c25d",
+     "required": [
+      "session",
+      "viewCursor"
+     ],
+     "props": [
+      "session",
+      "viewCursor"
+     ]
+    },
+    "SessionStartedParams": {
+     "digest": "0f3447c1c729a8f2d2bcf89e8e3bbd816a43a0b24f508c691ca772529a15f0a0",
+     "required": [
+      "session"
+     ],
+     "props": [
+      "session"
+     ]
+    },
+    "SessionStatus": {
+     "digest": "d14f9914084c1abb3a44e3681ae6aba04341857abe8f25127f9ddc64a54877f2",
+     "required": null,
+     "props": null
+    },
+    "SessionStatusChangedParams": {
+     "digest": "3c6a0d6f3547f4b7fc6c5e455e7b5e9a4699fb74adcbc55fbe5f67d1b37b11df",
+     "required": [
+      "sessionId",
+      "status",
+      "viewCursor"
+     ],
+     "props": [
+      "attention",
+      "sessionId",
+      "status",
+      "viewCursor"
+     ]
+    },
+    "SessionTodoListChangedParams": {
+     "digest": "7dca334c8cb6301decd924609ac3464165d1ef042f555c798fe6edf5a8c5eca9",
+     "required": [
+      "items",
+      "revision",
+      "sessionId",
+      "sourceRange",
+      "sourceTool",
+      "viewCursor"
+     ],
+     "props": [
+      "items",
+      "revision",
+      "sessionId",
+      "sourceRange",
+      "sourceTool",
+      "viewCursor"
+     ]
+    },
+    "SessionTokenUsageParams": {
+     "digest": "39747719cb832d30158c54cd95255a733c1c6e6bee14cf276a749aa63b3af1fc",
+     "required": [
+      "cumulative",
+      "modelId",
+      "promptTokens",
+      "sessionId",
+      "sourceRange",
+      "totalTokens",
+      "turnId",
+      "usage",
+      "viewCursor"
+     ],
+     "props": [
+      "cumulative",
+      "durationMs",
+      "finishReason",
+      "modelId",
+      "promptTokens",
+      "sessionId",
+      "sourceRange",
+      "totalTokens",
+      "turnId",
+      "usage",
+      "viewCursor"
+     ]
+    },
+    "SessionUserShellParams": {
+     "digest": "eebf6b64e528033e269541fec007433abb9146010c3f25e9ba1b603aa26f0224",
+     "required": [
+      "commandId",
+      "commandText",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "commandText",
+      "sessionId"
+     ]
+    },
+    "SessionUserShellResult": {
+     "digest": "050f736fd7146e8954001b1bfa48566900f16ee600f81f2423715175c48e796c",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "status"
+     ]
+    },
+    "SessionViewHealth": {
+     "digest": "6eedc6658aa5a19d00a8f862c9c04340c023757451d708a2707d83c575496cac",
+     "required": null,
+     "props": null
+    },
+    "SessionViewHealthChangedParams": {
+     "digest": "7e51f35fda2dfcf07f949de5770d84b4640a85bacfda4a68ca7d4bcd0a698ad2",
+     "required": [
+      "health",
+      "sessionId"
+     ],
+     "props": [
+      "health",
+      "noneReason",
+      "sessionId"
+     ]
+    },
+    "SideProvenance": {
+     "digest": "4c9152aca975390b3f19956062822f3ac66226bf5dbbec7634abf9f0bb9a3fb6",
+     "required": [
+      "commandId",
+      "cutCursor",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "cutCursor",
+      "sessionId"
+     ]
+    },
+    "SkillActivationScope": {
+     "digest": "ec63df23f1044f21f1d03d53b01a39c689464d220979d99c282413478e5bed83",
+     "required": null,
+     "props": null
+    },
+    "SkillActivationState": {
+     "digest": "c9e4b43a4c3c45b3c3ddf837e71a094db36a039133c08e17d723507f9f1e15da",
+     "required": null,
+     "props": null
+    },
+    "SkillCatalogEntry": {
+     "digest": "28f45798a6c50852e298f864926eb88f1e3aa5b5aff81a83da9fdec99dc1361f",
+     "required": [
+      "description",
+      "displayName",
+      "selector",
+      "source"
+     ],
+     "props": [
+      "argumentHint",
+      "description",
+      "displayName",
+      "pluginId",
+      "selector",
+      "source",
+      "title"
+     ]
+    },
+    "SkillChangedParams": {
+     "digest": "52c242db72cc254e11b3eea108256e2854d5c8d8fcdcf089e26787e02966adfd",
+     "required": [
+      "sessionId"
+     ],
+     "props": [
+      "sessionId"
+     ]
+    },
+    "SkillImportCounts": {
+     "digest": "55c19adf8021b4cc4a8e00856c4ba2ab445e3f020f3ec582110a8cdf203ff8b5",
+     "required": [
+      "failed",
+      "installed",
+      "quarantined",
+      "skipped"
+     ],
+     "props": [
+      "failed",
+      "installed",
+      "quarantined",
+      "skipped"
+     ]
+    },
+    "SkillImportFailure": {
+     "digest": "0e25b6f5fa44fea98a166eddb02d284eb0222e53f3e5e8b6d2d5646d34150094",
+     "required": [
+      "id",
+      "reason"
+     ],
+     "props": [
+      "id",
+      "reason"
+     ]
+    },
+    "SkillImportParams": {
+     "digest": "e79698b687b74fc3af4e97dcfdbd2538a3f3f1d3aa6577f4cc6b80a010c13854",
+     "required": [
+      "commandId",
+      "sessionId",
+      "source"
+     ],
+     "props": [
+      "commandId",
+      "dryRun",
+      "force",
+      "sessionId",
+      "source"
+     ]
+    },
+    "SkillImportQuarantine": {
+     "digest": "e29aa6dd52dee8bb5fd15a2cb09dfa9db890788ce0f18b97cb1fa1a2a87ee180",
+     "required": [
+      "id",
+      "reasons"
+     ],
+     "props": [
+      "id",
+      "reasons"
+     ]
+    },
+    "SkillImportResult": {
+     "digest": "5feb94268864bf285e8d0db4bb975e4db3c3affb745d9440a87094875723721b",
+     "required": [
+      "commandId",
+      "counts",
+      "dryRun",
+      "failed",
+      "installed",
+      "quarantined",
+      "skipped",
+      "source",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "counts",
+      "dryRun",
+      "failed",
+      "installed",
+      "quarantined",
+      "skipped",
+      "source",
+      "status"
+     ]
+    },
+    "SkillImportSource": {
+     "digest": "c6ccdb199389e2e71a1fb4a422b33cb935fb977d9a7ed5b90a0bf14674707546",
+     "required": null,
+     "props": null
+    },
+    "SkillInvocationSource": {
+     "digest": "f72d514beaa2c0e2d2146aad7f98658672be6c8ff1d0b21eda36ed2fd4b5fc74",
+     "required": null,
+     "props": null
+    },
+    "SkillListParams": {
+     "digest": "e995549e35a83bf089cf23c0ace95d816ca93eb291c9ef7285e55043683fc750",
+     "required": [
+      "sessionId"
+     ],
+     "props": [
+      "sessionId"
+     ]
+    },
+    "SkillListResult": {
+     "digest": "918e73759bace724e653eb7c5085519dfa898729ebe124240502bb3d49e8b8b5",
+     "required": [
+      "skills"
+     ],
+     "props": [
+      "skills"
+     ]
+    },
+    "SkillSetActivationParams": {
+     "digest": "16b3bdbc82cf9c891b647e5f24d271f3d0fe4023f6fe73aeffa25c47f6031ff4",
+     "required": [
+      "activation",
+      "commandId",
+      "scope",
+      "selector",
+      "sessionId"
+     ],
+     "props": [
+      "activation",
+      "commandId",
+      "scope",
+      "selector",
+      "sessionId"
+     ]
+    },
+    "SkillSetActivationResult": {
+     "digest": "37084de93176cf4dad954bb75ef97037001a953ccdc38a5f5f2ca3113f4f3fcb",
+     "required": [
+      "activation",
+      "commandId",
+      "previous",
+      "scope",
+      "selector",
+      "status"
+     ],
+     "props": [
+      "activation",
+      "commandId",
+      "previous",
+      "scope",
+      "selector",
+      "status"
+     ]
+    },
+    "SkillSource": {
+     "digest": "c204b3469ef66f016d1d352eac65557e354750a9ea148c66b617567582ddd1ce",
+     "required": null,
+     "props": null
+    },
+    "SnapshotAnchor": {
+     "digest": "eb21705d929e84c326e80ac6a52b95bc6cca3fe96f785858c3eb30d8f246f00b",
+     "required": [
+      "boundaryCursor",
+      "summarizedThrough"
+     ],
+     "props": [
+      "boundaryCursor",
+      "summarizedThrough"
+     ]
+    },
+    "SnapshotState": {
+     "digest": "b3700eac711ebfc876cf38818aa30a2ad69577ff476f04be7950f924b994ffad",
+     "required": [
+      "activeTurn",
+      "approvalMode",
+      "branch",
+      "effectiveModel",
+      "goal",
+      "items",
+      "pendingApprovals",
+      "pendingUserInputs",
+      "queuedTurns",
+      "todoList",
+      "tokenUsage",
+      "turnCount"
+     ],
+     "props": [
+      "activeTurn",
+      "approvalMode",
+      "branch",
+      "contextUsage",
+      "effectiveModel",
+      "goal",
+      "items",
+      "name",
+      "pendingApprovals",
+      "pendingUserInputs",
+      "queuedTurns",
+      "reasoningEffort",
+      "todoList",
+      "tokenUsage",
+      "turnCount"
+     ]
+    },
+    "SourceRange": {
+     "digest": "b9c9dea6ea0acd1dba9c1be266f5b904b0e65066de65b75a513ab138c69d64f7",
+     "required": [
+      "first",
+      "last",
+      "stream"
+     ],
+     "props": [
+      "first",
+      "last",
+      "stream"
+     ]
+    },
+    "StatusAttempt": {
+     "digest": "023304b2d1d03b9a788dbd02a11cc88f049300360009287aae4cd9879b65700e",
+     "required": [
+      "attempt",
+      "operation",
+      "system"
+     ],
+     "props": [
+      "attempt",
+      "errorKind",
+      "httpStatus",
+      "maxAttempts",
+      "nextAttempt",
+      "operation",
+      "retryDelayMs",
+      "system"
+     ]
+    },
+    "StatusChildren": {
+     "digest": "c4eaf7185524b16cf98a46d2fa4359d426076b12ff1e1c666994ed34c8dd7ec1",
+     "required": [
+      "active",
+      "cancelled",
+      "completed",
+      "failed"
+     ],
+     "props": [
+      "active",
+      "cancelled",
+      "completed",
+      "failed",
+      "total"
+     ]
+    },
+    "StatusHealth": {
+     "digest": "25c35bb9ca432a69e9689836875d20f53c5ef7801183a14e39dd02e3069bea85",
+     "required": [
+      "level"
+     ],
+     "props": [
+      "level",
+      "reason"
+     ]
+    },
+    "StatusHealthLevel": {
+     "digest": "b0114611897a4b8cd8106ce4fe4993f6784327f87a8cea0cc870db5e9b283fbe",
+     "required": null,
+     "props": null
+    },
+    "StatusProgress": {
+     "digest": "1e2774a2646fb6581be862a55cb9fd090d9d5458f80c915f457ca8948a6a321c",
+     "required": [
+      "current"
+     ],
+     "props": [
+      "current",
+      "total",
+      "unit"
+     ]
+    },
+    "StatusStep": {
+     "digest": "c7c9ef5c1051175fa87d8af7ba84e246ff22a87fa68c230d5e2debcdc4a944e3",
+     "required": [
+      "label"
+     ],
+     "props": [
+      "index",
+      "label",
+      "total"
+     ]
+    },
+    "StreamRef": {
+     "digest": "4cda13cfdbb72a6139976860b58033ffe643a263cd83c3642ab0d2b94f94777c",
+     "required": [
+      "id",
+      "kind"
+     ],
+     "props": [
+      "id",
+      "kind"
+     ]
+    },
+    "SubagentControlStatus": {
+     "digest": "4b13ec0e8dc7e0d0c79856e231a2283ed24febb8a6f345e2ef017e1d1d3242d9",
+     "required": null,
+     "props": null
+    },
+    "SubagentInputParams": {
+     "digest": "3030f7d45085c3a940fa68be6af1b47685d2cf9f9f6da1fd6782dffcfe8c4e22",
+     "required": [
+      "body",
+      "commandId",
+      "sessionId",
+      "subagentId"
+     ],
+     "props": [
+      "body",
+      "commandId",
+      "sessionId",
+      "subagentId"
+     ]
+    },
+    "SubagentOwnerReasonParams": {
+     "digest": "0c3400e17f42e4b4c3272aa122602deb234ad0d6bb8bd7a18623800e160d3eef",
+     "required": [
+      "commandId",
+      "sessionId",
+      "subagentId"
+     ],
+     "props": [
+      "commandId",
+      "reason",
+      "sessionId",
+      "subagentId"
+     ]
+    },
+    "SubagentResult": {
+     "digest": "e11eb0c17db9d5eedcde31c044891426bfb65587425757b0d3fba8c7342ff97a",
+     "required": [
+      "artifactRefs",
+      "evidenceRefs",
+      "summary"
+     ],
+     "props": [
+      "artifactRefs",
+      "drained",
+      "errorKind",
+      "evidenceRefs",
+      "structuredData",
+      "summary",
+      "text"
+     ]
+    },
+    "SubagentTargetParams": {
+     "digest": "672a4ffbab2062c1acbc1bbc40e3476427f0e73de7152cfbffc1cb59a512b04e",
+     "required": [
+      "commandId",
+      "sessionId",
+      "subagentId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "subagentId"
+     ]
+    },
+    "SubscriptionUsage": {
+     "digest": "717967549bfef4427bdac1eaee80052ec9d96e252fb19d88ec21cdd5267ccf9f",
+     "required": [
+      "observedAtMs",
+      "tier",
+      "weekly",
+      "window"
+     ],
+     "props": [
+      "observedAtMs",
+      "tier",
+      "weekly",
+      "window"
+     ]
+    },
+    "SubscriptionUsageWeekly": {
+     "digest": "d1478981fbe514401ae9f7c8f13a15c4433618aaa5d11309432c0f6945e141f7",
+     "required": [
+      "resetsAtMs",
+      "usedPercent"
+     ],
+     "props": [
+      "resetsAtMs",
+      "usedPercent"
+     ]
+    },
+    "SubscriptionUsageWindow": {
+     "digest": "527e498cc780f89204428ec82bc2594ed52a84450fdae67cbd2553d6db693abe",
+     "required": [
+      "resetsAtMs",
+      "usedPercent",
+      "windowDurationMins"
+     ],
+     "props": [
+      "resetsAtMs",
+      "usedPercent",
+      "windowDurationMins"
+     ]
+    },
+    "SuccessResponse": {
+     "digest": "fe08c7fcb552c4ef93fd7a09c77af76e7d705870ccd30768a6521fdad616a12f",
+     "required": [
+      "id",
+      "jsonrpc",
+      "result"
+     ],
+     "props": [
+      "id",
+      "jsonrpc",
+      "result"
+     ]
+    },
+    "TaskBackgroundParams": {
+     "digest": "c7a6550d9f1e9a0604f1ce6a12faab5de70d8058c18dc3d7a30e4659b8ba7648",
+     "required": [
+      "commandId",
+      "sessionId",
+      "taskId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "taskId"
+     ]
+    },
+    "TaskCommandResult": {
+     "digest": "c994a27e5fae8db5c30d522938daa601d9e0f277f72b46aaf2e144fb78f6fdda",
+     "required": [
+      "commandId",
+      "status",
+      "taskId"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "taskId"
+     ]
+    },
+    "TaskExecutionMode": {
+     "digest": "3fae66e653a83b0cc1790d155b5c1b37c61a04f79ac97a1991682d1ae7636a68",
+     "required": null,
+     "props": null
+    },
+    "TaskListEntry": {
+     "digest": "2e5bf62135b6ebc16c1b9b8a470db90df7e0976a1fe50df0a5b490ddadad48e4",
+     "required": [
+      "kind",
+      "status",
+      "taskId"
+     ],
+     "props": [
+      "backgroundInitiator",
+      "command",
+      "executionMode",
+      "kind",
+      "startedAt",
+      "status",
+      "taskId",
+      "tool"
+     ]
+    },
+    "TaskListParams": {
+     "digest": "7e0f188c0a84565506cb642db8175d26740cb7222135e6dd665d3ee2a2eddb0a",
+     "required": [
+      "sessionId"
+     ],
+     "props": [
+      "sessionId"
+     ]
+    },
+    "TaskListResult": {
+     "digest": "5ced76b888f41ced66b85f2bac9ba70165adb36b418f2d5f97cb0023cd858a8a",
+     "required": [
+      "tasks"
+     ],
+     "props": [
+      "tasks"
+     ]
+    },
+    "TaskListStatus": {
+     "digest": "50c133e35d8c70415ff2b17a34d8a054bb0dbc390a73814c6a11bdf96e95db48",
+     "required": null,
+     "props": null
+    },
+    "TaskStopAllParams": {
+     "digest": "43b0b981be4dc130ef750feef707644b34f3f187b83ec4863f5e724b017673fe",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId"
+     ]
+    },
+    "TaskStopAllResult": {
+     "digest": "19b2bc644a20f803217d2d5ce427ed9d6cf426d481fd42c4a01d0a11600310f8",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "status"
+     ]
+    },
+    "TaskStopParams": {
+     "digest": "50f7dfcddda4c433be9268b3e344017313f4af5e3a8f2064031406f19bd9305e",
+     "required": [
+      "commandId",
+      "sessionId",
+      "taskId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "taskId"
+     ]
+    },
+    "TodoItem": {
+     "digest": "5019b913e2c17fa146506b8444fd71af9978eb9d22f9457cb01a46d862d316ac",
+     "required": [
+      "status",
+      "text"
+     ],
+     "props": [
+      "activeForm",
+      "status",
+      "text"
+     ]
+    },
+    "TodoListState": {
+     "digest": "144cc642119b51c4b09880d3950d3fb321cffdc7bb8845f3fb44482d3d6953fd",
+     "required": [
+      "items",
+      "revision",
+      "sourceTool"
+     ],
+     "props": [
+      "items",
+      "revision",
+      "sourceTool"
+     ]
+    },
+    "TodoStatus": {
+     "digest": "55e1e4ac7a32bf10e6ad6d53740e39e005236277463ca1c5a5d28f7a4133933d",
+     "required": null,
+     "props": null
+    },
+    "TokenUsage": {
+     "digest": "1363d927baf6aedb6a76390b70ddf51309e78dc0faa452d2c1b9a03f616773c4",
+     "required": [
+      "cachedTokens",
+      "inputTokens",
+      "outputTokens",
+      "reasoningTokens"
+     ],
+     "props": [
+      "cacheReadTokens",
+      "cacheWriteTokens",
+      "cachedTokens",
+      "inputTokens",
+      "outputTokens",
+      "reasoningTokens"
+     ]
+    },
+    "ToolDisplayLabel": {
+     "digest": "60e24ea9828b4b6338764d7906b98944bb47ae84452102ef1823ef6603740236",
+     "required": [
+      "active",
+      "done",
+      "neutral"
+     ],
+     "props": [
+      "active",
+      "done",
+      "neutral"
+     ]
+    },
+    "ToolReceipt": {
+     "digest": "bc5dee0c435d0f88d878c4cdc494fbda4238ce52a087fe53c9e00f4866faaa3a",
+     "required": null,
+     "props": null
+    },
+    "ToolReceiptOperation": {
+     "digest": "2cccac1a189edb067ecfbb293f20d269159e193f14d8ad63cd78ce9c17df3161",
+     "required": null,
+     "props": null
+    },
+    "ToolReceiptOutcome": {
+     "digest": "a526378a2e454002425973e1af1d8209dadcea229df5f9de697f0479c7fe2cdc",
+     "required": null,
+     "props": null
+    },
+    "TraceContext": {
+     "digest": "ce21a5b2e905c2efeff89dc201608710ac4892c4990f76c6347fb20b05bca08e",
+     "required": null,
+     "props": [
+      "traceparent",
+      "tracestate"
+     ]
+    },
+    "TurnCancelParams": {
+     "digest": "400cc67fe9aaae9b433b7c6461f7d6e2a1244b5a65a85ba6be386407bd144b92",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "turnId"
+     ]
+    },
+    "TurnCancelResult": {
+     "digest": "646508f051221b4b8d8c5ddb2e9e13259e678a9312035d177b149afb39c7bbca",
+     "required": [
+      "commandId",
+      "status",
+      "turnId"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "turnId"
+     ]
+    },
+    "TurnCompletedParams": {
+     "digest": "fb1b74ea8d73f20e0c0b6138ce8c6318ff542922248b3b5c37c1032ff9593ce7",
+     "required": [
+      "sessionId",
+      "sourceRange",
+      "terminal",
+      "turnId",
+      "viewCursor"
+     ],
+     "props": [
+      "durationMs",
+      "error",
+      "reason",
+      "sessionId",
+      "sourceRange",
+      "terminal",
+      "timeToFirstTokenMs",
+      "turnId",
+      "usage",
+      "viewCursor"
+     ]
+    },
+    "TurnError": {
+     "digest": "ade9ca067afafe0e23c9e03f83ffb45cff41181571fc51493768d7d9aedbe076",
+     "required": [
+      "kind",
+      "message",
+      "retryable"
+     ],
+     "props": [
+      "kind",
+      "message",
+      "quota",
+      "requestDenied",
+      "retryable"
+     ]
+    },
+    "TurnErrorKind": {
+     "digest": "30393381991cc0da9dc030fdc651c337e7e5da3baa41a629647e5e781742b324",
+     "required": null,
+     "props": null
+    },
+    "TurnForegroundCompletedParams": {
+     "digest": "b86008e20d3547dcce81a31c95ed35073927485159175102c52aa4eb54fdbb39",
+     "required": [
+      "blockingAgents",
+      "sessionId",
+      "sourceRange",
+      "turnId",
+      "viewCursor"
+     ],
+     "props": [
+      "blockingAgents",
+      "sessionId",
+      "sourceRange",
+      "turnId",
+      "viewCursor"
+     ]
+    },
+    "TurnInputPart": {
+     "digest": "0db1cd3b21f19c1e9172ac6efb4ffe34c6b75f9319b4c44d85ad6e0b69544617",
+     "required": [
+      "type"
+     ],
+     "props": [
+      "arguments",
+      "base64Data",
+      "height",
+      "mediaType",
+      "selector",
+      "source",
+      "text",
+      "type",
+      "uploadId",
+      "width"
+     ]
+    },
+    "TurnInputPartType": {
+     "digest": "c59bc3a9672691c4067103b4a5288cdace6e9a2e6d0ff6e406e46a247129b503",
+     "required": null,
+     "props": null
+    },
+    "TurnInterruptParams": {
+     "digest": "657bf2435cbc6f4437eff08c10c733c3c6284ed6e5e738f2e6b44156b6116426",
+     "required": [
+      "commandId",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "retract",
+      "sessionId",
+      "turnId"
+     ]
+    },
+    "TurnInterruptResult": {
+     "digest": "a3886a95886b84a290cc32b1217e312ec651cd6ffe5425d5bd71cc6a0d1233be",
+     "required": [
+      "commandId",
+      "status",
+      "turnId"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "turnId"
+     ]
+    },
+    "TurnModelRetryScheduledParams": {
+     "digest": "a2e144898cd5bedca5d9df85663e641cdfafebeae5fb9184ac9c0431afab0e75",
+     "required": [
+      "attempt",
+      "maxAttempts",
+      "nextAttempt",
+      "retryDelayMs",
+      "sessionId",
+      "sourceRange",
+      "turnId",
+      "viewCursor"
+     ],
+     "props": [
+      "attempt",
+      "errorKind",
+      "httpStatus",
+      "maxAttempts",
+      "nextAttempt",
+      "retryDelayMs",
+      "sessionId",
+      "sourceRange",
+      "system",
+      "turnId",
+      "viewCursor"
+     ]
+    },
+    "TurnRef": {
+     "digest": "d84179883899b8dfbf31157bb646705df086061bff660d94f867a7cc4e6072fa",
+     "required": [
+      "commandId",
+      "turnId"
+     ],
+     "props": [
+      "commandId",
+      "displayText",
+      "truncated",
+      "turnId"
+     ]
+    },
+    "TurnRetractedParams": {
+     "digest": "7dbeec9ee49f34beee03697cf6dcd467c4f8303c026cdf97e5cc95d3b7de87c7",
+     "required": [
+      "commandId",
+      "sessionId",
+      "sourceRange",
+      "turnId",
+      "viewCursor"
+     ],
+     "props": [
+      "commandId",
+      "outcome",
+      "sessionId",
+      "sourceRange",
+      "turnId",
+      "viewCursor"
+     ]
+    },
+    "TurnRetryScheduledParams": {
+     "digest": "172c77f3186ecf326602568f4bf4a48d837dc02189c913eb4dd0c37d70520400",
+     "required": [
+      "attempt",
+      "maxAttempts",
+      "nextAttempt",
+      "reason",
+      "retryDelayMs",
+      "sessionId",
+      "sourceRange",
+      "turnId",
+      "viewCursor"
+     ],
+     "props": [
+      "attempt",
+      "errorKind",
+      "httpStatus",
+      "maxAttempts",
+      "nextAttempt",
+      "reason",
+      "retryDelayMs",
+      "sessionId",
+      "sourceRange",
+      "system",
+      "turnId",
+      "viewCursor"
+     ]
+    },
+    "TurnStartDisposition": {
+     "digest": "c177276a51f518a3c55d833957d264012db392169bc238803038f07d0a7cdd41",
+     "required": null,
+     "props": null
+    },
+    "TurnStartParams": {
+     "digest": "2d611c2f3f9fe290a6bf9c5ff4e3fc3925c5b253aa69381e5976fb0f69d06182",
+     "required": [
+      "commandId",
+      "input",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "displayText",
+      "ifBusy",
+      "input",
+      "reasoningEffort",
+      "sessionId",
+      "userShell",
+      "workspaceRoots"
+     ]
+    },
+    "TurnStartResult": {
+     "digest": "238ce548a67054021ac2683ec1e06b1653258290e58247c3b95d0121a583c009",
+     "required": [
+      "commandId",
+      "disposition",
+      "startedNewTurn",
+      "status",
+      "turnId"
+     ],
+     "props": [
+      "commandId",
+      "disposition",
+      "startedNewTurn",
+      "status",
+      "turnId"
+     ]
+    },
+    "TurnStartedParams": {
+     "digest": "591091909b136874376400614b49f1a28a71021dd8ba9e65a432077f62be37c0",
+     "required": [
+      "commandId",
+      "sessionId",
+      "sourceRange",
+      "turnId",
+      "viewCursor"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "sourceRange",
+      "turnId",
+      "viewCursor"
+     ]
+    },
+    "TurnSteerParams": {
+     "digest": "357ea6e15a9a59d2dfc776a133d2434085aa0ea7b2ce4c4ca37ab566d208ae41",
+     "required": [
+      "commandId",
+      "expectedTurnId",
+      "input",
+      "sessionId"
+     ],
+     "props": [
+      "commandId",
+      "expectedTurnId",
+      "input",
+      "reasoningEffort",
+      "sessionId"
+     ]
+    },
+    "TurnSteerResult": {
+     "digest": "dfd102270348ea9f680b8466698f628cc8ce3ee8e7990767d31a466906cf8358",
+     "required": [
+      "commandId",
+      "status",
+      "turnId"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "turnId"
+     ]
+    },
+    "TurnTerminal": {
+     "digest": "5bf3cfc114313155e571c24cf50ef89691ecac819b3b933ece53b438af696693",
+     "required": null,
+     "props": null
+    },
+    "TurnUnqueueParams": {
+     "digest": "90260e2dd2df9ee5345952eaf2263bc06a823ee376683c078182e4774f559f2c",
+     "required": [
+      "commandId",
+      "sessionId",
+      "turnId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "turnId"
+     ]
+    },
+    "TurnUnqueueResult": {
+     "digest": "6193c6e05f2f6fc888c7d4e8f3c33c60a600366baf404db6c2572b0a59dab300",
+     "required": [
+      "commandId",
+      "status",
+      "turnId"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "turnId"
+     ]
+    },
+    "TurnUnqueuedParams": {
+     "digest": "762c2b1546683ed94e81c8bdd1cdba3da980f7eef2139e0e38e210eb90504efc",
+     "required": [
+      "commandId",
+      "sessionId",
+      "sourceRange",
+      "turnId",
+      "viewCursor"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "sourceRange",
+      "turnId",
+      "viewCursor"
+     ]
+    },
+    "TurnUserShell": {
+     "digest": "e70ba4b4a2ccf07686f96ee3f8efad0ae1cee0f45f84e41aebdc2bdaa57936e2",
+     "required": [
+      "commandText"
+     ],
+     "props": [
+      "commandText"
+     ]
+    },
+    "UnframedViewNotification": {
+     "digest": "ea992ea195ddcd630fd68d751e339bd53ce77bf186cd5bde94ddf4dac6add018",
+     "required": [
+      "method",
+      "params"
+     ],
+     "props": [
+      "method",
+      "params"
+     ]
+    },
+    "UnframedViewNotificationParams": {
+     "digest": "9e510eef6abd98fea89148af5d2f6c1309dd0ff9f26fd6fe8be78704589d1488",
+     "required": [
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ],
+     "props": [
+      "sessionId",
+      "sourceRange",
+      "viewCursor"
+     ]
+    },
+    "UnknownModelReasoningEffortVariants": {
+     "digest": "3b81dd7a0f2912ca79720393722b630788e2ea9c4d6743b80999bb28c419da8c",
+     "required": null,
+     "props": null
+    },
+    "UsageReadResult": {
+     "digest": "b8ebf2d40a9e78259b99692b70f01463fb05d3cb33ebedc70a1d826a415ed645",
+     "required": null,
+     "props": [
+      "usage"
+     ]
+    },
+    "UserInputAnswer": {
+     "digest": "f708fca63d6379e12cc5194dfa0933abf38dd21e67f444253013640a770cf51c",
+     "required": [
+      "questionId"
+     ],
+     "props": [
+      "freeText",
+      "note",
+      "questionId",
+      "selectedLabel",
+      "selectedLabels"
+     ]
+    },
+    "UserInputAnswerParams": {
+     "digest": "c3f17ff03ca4db1a15c9d3523b5d9c61b0e3286693d2650907a32fed7b4ee392",
+     "required": [
+      "answers",
+      "commandId",
+      "sessionId",
+      "userInputId"
+     ],
+     "props": [
+      "answers",
+      "commandId",
+      "sessionId",
+      "userInputId"
+     ]
+    },
+    "UserInputAnswerResult": {
+     "digest": "cc2cd191707a5eab23cbd8d36fad605a438547ea0d487aa4f1692788a2dd817f",
+     "required": [
+      "commandId",
+      "status",
+      "userInputId"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "userInputId"
+     ]
+    },
+    "UserInputCancelParams": {
+     "digest": "65ef47d225c7c222597279e38869575e62262a9df62a715a377c67501da8bcd9",
+     "required": [
+      "commandId",
+      "sessionId",
+      "userInputId"
+     ],
+     "props": [
+      "commandId",
+      "reason",
+      "sessionId",
+      "userInputId"
+     ]
+    },
+    "UserInputCancelResult": {
+     "digest": "ba93b3e3a9cf1adf84a80f387e997c76bebd6ccb515f898ae9c264b4c5248248",
+     "required": [
+      "commandId",
+      "status",
+      "userInputId"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "userInputId"
+     ]
+    },
+    "UserInputClarification": {
+     "digest": "ff775994a3725b9ac2e8ef4616c65eb1dfbee88e145c2ca13c845bd37e660663",
+     "required": [
+      "content",
+      "format"
+     ],
+     "props": [
+      "content",
+      "format"
+     ]
+    },
+    "UserInputClarifyParams": {
+     "digest": "20c56d2bd792c36aa865a66cb7f25fe813a6c3ac34f0f96b85bdfa5b6290de84",
+     "required": [
+      "clarification",
+      "commandId",
+      "sessionId",
+      "userInputId"
+     ],
+     "props": [
+      "clarification",
+      "commandId",
+      "sessionId",
+      "userInputId"
+     ]
+    },
+    "UserInputClarifyResult": {
+     "digest": "6cd9eaff7849582afb0007b8ff3949a3527ac2f2a4e34a68e02bdb4907e7ff6d",
+     "required": [
+      "commandId",
+      "status",
+      "userInputId"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "userInputId"
+     ]
+    },
+    "UserInputEngagedParams": {
+     "digest": "e61944c4508419a55ceacd9def9ff4a8d643eec414c1d5d3df4ce6b9d1395808",
+     "required": [
+      "sessionId",
+      "userInputId"
+     ],
+     "props": [
+      "sessionId",
+      "userInputId"
+     ]
+    },
+    "UserInputInterruptParams": {
+     "digest": "8646e0d4a5b8afdff6429591d05499042544c9234fd3a390313405759735d760",
+     "required": [
+      "commandId",
+      "sessionId",
+      "userInputId"
+     ],
+     "props": [
+      "answers",
+      "commandId",
+      "sessionId",
+      "userInputId"
+     ]
+    },
+    "UserInputInterruptResult": {
+     "digest": "726ac06a3e6f21251f87b763cce9339f3e172c53c0cff7b3358cc7a4e680a395",
+     "required": [
+      "commandId",
+      "status",
+      "userInputId"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "userInputId"
+     ]
+    },
+    "UserInputOption": {
+     "digest": "f1097166053006cc2af685ae23bc898a6e401c1ce888336671359f6738caaf20",
+     "required": [
+      "label"
+     ],
+     "props": [
+      "description",
+      "label",
+      "preview"
+     ]
+    },
+    "UserInputOptionPreview": {
+     "digest": "9f5e07455c7c752a37c35b7ab4618695a3935e5aa57e5fc36d0c9afd322619b6",
+     "required": [
+      "content",
+      "format"
+     ],
+     "props": [
+      "content",
+      "format"
+     ]
+    },
+    "UserInputOutcome": {
+     "digest": "bde7cda2d85c7b9e5ae9928eba19ff66f7633ef1b226e8621ed710ff3163896d",
+     "required": null,
+     "props": null
+    },
+    "UserInputQuestion": {
+     "digest": "0aedd87da621ebba14f53b56789ef6bd0ad6b9d3f20ca418b0296e8915f183a1",
+     "required": [
+      "header",
+      "id",
+      "options",
+      "question",
+      "selection"
+     ],
+     "props": [
+      "header",
+      "id",
+      "options",
+      "question",
+      "selection"
+     ]
+    },
+    "UserInputRequestParams": {
+     "digest": "cd07d36318724c5a304b4b69333014ef3460feb9800bf6f5fef973777e00a1cc",
+     "required": [
+      "itemId",
+      "questions",
+      "sessionId",
+      "toolCallId",
+      "toolName",
+      "turnId",
+      "userInputId",
+      "viewCursor"
+     ],
+     "props": [
+      "autoResolutionMs",
+      "itemId",
+      "questions",
+      "sessionId",
+      "sourceRange",
+      "toolCallId",
+      "toolName",
+      "turnId",
+      "userInputId",
+      "viewCursor"
+     ]
+    },
+    "UserInputSelection": {
+     "digest": "d0f04c2018deddc3a16ae5c3f0b7e7700fd2bd502e0c62c94eced15faddc0a9f",
+     "required": [
+      "mode"
+     ],
+     "props": [
+      "maxSelections",
+      "minSelections",
+      "mode"
+     ]
+    },
+    "UserInputSelectionMode": {
+     "digest": "3a0fc1ac8d8db4d0d125fe9c8991c2ba122698ecb7ba2456da8c064ee68e3958",
+     "required": null,
+     "props": null
+    },
+    "UserInputSettledParams": {
+     "digest": "31a8b9a012d1f8148e680bbbe42927fbc1dfb64dbd488cc79fc146d333dbc5d9",
+     "required": [
+      "answers",
+      "clarification",
+      "decidedAt",
+      "decidedByCommandId",
+      "outcome",
+      "reason",
+      "sessionId",
+      "sourceRange",
+      "userInputId",
+      "viewCursor"
+     ],
+     "props": [
+      "answers",
+      "clarification",
+      "decidedAt",
+      "decidedByCommandId",
+      "outcome",
+      "reason",
+      "sessionId",
+      "sourceRange",
+      "userInputId",
+      "viewCursor"
+     ]
+    },
+    "UserInputSettlementSummary": {
+     "digest": "f10edea059de5d0bce6b1ef92c8bc4df531d9fa65b1ba8fc3ac3c41f95b806ac",
+     "required": [
+      "outcome",
+      "viewCursor"
+     ],
+     "props": [
+      "outcome",
+      "viewCursor"
+     ]
+    },
+    "Vcs": {
+     "digest": "0042c54b6732291f6ea9d1e8d0339c5a0b1fa8e50bfa17cd1a5a0f3b77f49f2d",
+     "required": null,
+     "props": null
+    },
+    "ViewGapParams": {
+     "digest": "013ad21341934ba817cb7d8ac1953844b3a45e065e8a28d5be9ccbbaa66385ac",
+     "required": [
+      "after",
+      "next",
+      "sessionId"
+     ],
+     "props": [
+      "after",
+      "next",
+      "sessionId"
+     ]
+    },
+    "ViewPageAnchor": {
+     "digest": "9752c8beb57dfba667633babbca522589fb683deb0b0b5dc55675d5387d6b08b",
+     "required": null,
+     "props": null
+    },
+    "ViewPageDirection": {
+     "digest": "f11e3e3b95e47def2f2b216aad4fe472834d29f9c56d3be6851d452773585e69",
+     "required": null,
+     "props": null
+    },
+    "ViewPageParams": {
+     "digest": "0cce0312732028b9ddc2bbe5a08d128b4d7fe1154a0a683c7877cb8e3e92a8fe",
+     "required": [
+      "limit",
+      "sessionId"
+     ],
+     "props": [
+      "anchor",
+      "cursor",
+      "direction",
+      "limit",
+      "maxBytes",
+      "sessionId"
+     ]
+    },
+    "ViewPageResolvedAnchor": {
+     "digest": "6558d8baa9fbe09fe6f5a185d991dc799d385dd8ae59bb04ee22902ca5565de3",
+     "required": [
+      "boundaryCursor"
+     ],
+     "props": [
+      "boundaryCursor"
+     ]
+    },
+    "ViewPageResult": {
+     "digest": "5937deca5c6fa3a5cca89c89cb140dcf611da4d28708f816116d1c92f5c21f42",
+     "required": [
+      "events",
+      "nextCursor"
+     ],
+     "props": [
+      "events",
+      "nextCursor",
+      "resolvedAnchor"
+     ]
+    },
+    "ViewSnapshot": {
+     "digest": "b1097e8ff9391169b780d71c42cf38c1ae756d8e132ed5d21a4c76f4d5e49955",
+     "required": [
+      "schemaVersion",
+      "state",
+      "viewCursor"
+     ],
+     "props": [
+      "anchor",
+      "schemaVersion",
+      "state",
+      "viewCursor"
+     ]
+    },
+    "ViewSubscribeParams": {
+     "digest": "b7c254f24babb415aee165adbac660edf8d9a4d56b487ab02726bdf4150d965b",
+     "required": [
+      "sessionId"
+     ],
+     "props": [
+      "after",
+      "sessionId"
+     ]
+    },
+    "ViewSubscribeResult": {
+     "digest": "b25a1af1546293d8ec52ea0877ad89d5312f0d183b281117721d2b0540158381",
+     "required": [
+      "viewCursor"
+     ],
+     "props": [
+      "viewCursor"
+     ]
+    },
+    "ViewUnsubscribeParams": {
+     "digest": "325cc762f7eb7f4ea741f6e88fc2b8bb04260d741fbe317f652b0686996de77a",
+     "required": [
+      "sessionId"
+     ],
+     "props": [
+      "sessionId"
+     ]
+    },
+    "ViewUnsubscribeResult": {
+     "digest": "544b00ec8ea5beb73bb3f2dc349c1a94e58cbaf27dc95403f4e50faa00b6845a",
+     "required": null,
+     "props": []
+    },
+    "WorkflowCancelParams": {
+     "digest": "8fd66140e9891e7bb0c19af69f24633a56985e9e78170c543018f5ae33c86830",
+     "required": [
+      "commandId",
+      "sessionId",
+      "workflowRunId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "workflowRunId"
+     ]
+    },
+    "WorkflowChild": {
+     "digest": "e645b88a46fd8dbd864d488219b06efdd959ceaf4c01603f3952b0d6b967d060",
+     "required": [
+      "attempt",
+      "childId",
+      "status"
+     ],
+     "props": [
+      "attempt",
+      "childId",
+      "durationMs",
+      "failureKind",
+      "failureReason",
+      "label",
+      "phase",
+      "resultRef",
+      "status",
+      "terminal",
+      "usage"
+     ]
+    },
+    "WorkflowChildAction": {
+     "digest": "ca65201436645b7a05dec454077f9b75e0480a6fecf919fdfdfff7d9b2fcff6e",
+     "required": null,
+     "props": null
+    },
+    "WorkflowChildControlParams": {
+     "digest": "4c3fb2650001bbc17644826ce6c461913be5a65941674aa96fd8e2dd732868b0",
+     "required": [
+      "action",
+      "attempt",
+      "childId",
+      "commandId",
+      "sessionId",
+      "workflowRunId"
+     ],
+     "props": [
+      "action",
+      "attempt",
+      "childId",
+      "commandId",
+      "sessionId",
+      "workflowRunId"
+     ]
+    },
+    "WorkflowControlResult": {
+     "digest": "dc7356555013afe2a78be2300b7e4626ed390d02ff24a373ec533d98c5e73217",
+     "required": [
+      "commandId",
+      "status"
+     ],
+     "props": [
+      "commandId",
+      "status"
+     ]
+    },
+    "WorkflowPauseParams": {
+     "digest": "c2359671a78d050d26fb373d2a82def0068aa923bb8fc44c39bebb6b840b6c4c",
+     "required": [
+      "commandId",
+      "sessionId",
+      "workflowRunId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "workflowRunId"
+     ]
+    },
+    "WorkflowResumeParams": {
+     "digest": "a2ed66aef5dbb1276a034b417e2165a066546918887630e5af855fcbc8784b7f",
+     "required": [
+      "commandId",
+      "sessionId",
+      "workflowRunId"
+     ],
+     "props": [
+      "commandId",
+      "sessionId",
+      "workflowRunId"
+     ]
+    },
+    "WorkflowResumeResult": {
+     "digest": "063a656cf3b629325c826cf973e820557a5785600cf7a98a4576ed1f4b7f0b0d",
+     "required": [
+      "commandId",
+      "status",
+      "turnId"
+     ],
+     "props": [
+      "commandId",
+      "status",
+      "turnId"
+     ]
+    },
+    "WorkflowTokenBudget": {
+     "digest": "bd1062af0d85aacf7c33dba6a0b1e97ccabd071175a958091bacfcc030f2d167",
+     "required": [
+      "total"
+     ],
+     "props": [
+      "total"
+     ]
+    }
+   },
+   "sections_digest": {
+    "methods": "b71d039c981d31281e951de01bf1635a9185c099b1f7015f6de5fb96dc94dc6e",
+    "requests": "1a41b5a80574583854668153122e8af281ad611adbb66ef25c8d4a83e7f5122f",
+    "notifications": "f14237099687b69b79d3ae92558f8a138b4eaca9cbbc0a0cab39eb351f9fcfaf",
+    "errors": "f89144877741c917c62809264d137f93ce9350eecee0cee43ca8a3569fd9fbd0",
+    "capabilities": "ea2e14f0669fd28c99576b2ef8f58af32b2a424c467395d0b6488c63ed6b7ed2",
+    "$defs": "e5a4b75b3afebf3d3300eec3142059fc26cc37ea3099f7142fa786fe9bbd91e5"
+   }
   }
  ]
 }
