@@ -90,4 +90,21 @@ describe("opencode backend host config", () => {
 
     expect(removed).toEqual(["old-one"]);
   });
+
+  test("hostConfig.sweepKeepsLiveEntries", () => {
+    const root = makeRoot();
+    const hosts = join(root, "hosts");
+    const now = Date.now();
+    for (const name of ["live-one", "dead-one"]) {
+      const dir = join(hosts, name, "muse");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "settings.json"), "{}");
+      const past = new Date(now - 120_000);
+      utimesSync(join(hosts, name), past, past);
+    }
+
+    const removed = sweepHostConfigs(root, 60_000, now, new Set(["live-one"]));
+
+    expect(removed).toEqual(["dead-one"]);
+  });
 });

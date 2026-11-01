@@ -105,7 +105,12 @@ export function writeHostConfig(
  * leftovers). Fresh entries may belong to a live sibling process, so they
  * are never touched. Returns the removed session keys.
  */
-export function sweepHostConfigs(stateDirectory: string, olderThanMs: number, now: number = Date.now()): string[] {
+export function sweepHostConfigs(
+  stateDirectory: string,
+  olderThanMs: number,
+  now: number = Date.now(),
+  keep: ReadonlySet<string> = new Set(),
+): string[] {
   const hosts = join(stateDirectory, "hosts");
   let names: string[];
   try {
@@ -116,6 +121,7 @@ export function sweepHostConfigs(stateDirectory: string, olderThanMs: number, no
   const removed: string[] = [];
   for (const name of names) {
     if (!SESSION_KEY_PATTERN.test(name)) continue;
+    if (keep.has(name)) continue;
     const path = join(hosts, name);
     let age = 0;
     try {

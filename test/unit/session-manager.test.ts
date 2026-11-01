@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1206,6 +1206,58 @@ describe("rewind/fork anchors and explicit-cut fork", () => {
       expect(String(hostOptions[0]?.env?.XDG_CONFIG_HOME ?? "")).toContain(join("hosts", "ses_oc_1"));
       expect(binding.sessionId).toMatch(/^ses_muse_/);
       await binding.release?.();
+      await manager.close();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+  });
+
+  test("sessionManager.opencodeBackendRejectsArrayToolSchema", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    try {
+      const { manager } = managerAt(root, false, false, undefined, undefined, undefined, undefined, "opencode");
+      const binding = await manager.resolveSession(context("ses_oc_1", directory));
+
+      expect(() =>
+        binding.syncLoopbackTools?.([{ name: "opencode_write", description: "w", inputSchema: [] }]),
+      ).toThrow(/tools/);
+      expect(() =>
+        binding.syncLoopbackTools?.([{ name: "opencode_write", description: "w", inputSchema: { type: "object" } }]),
+      ).not.toThrow();
+      await manager.close();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+  });
+
+  test("sessionManager.opencodeBackendSweepKeepsLiveBinding", async () => {
+    const root = tempRoot();
+    const directoryA = join(root, "project-a");
+    const directoryB = join(root, "project-b");
+    mkdirSync(directoryA);
+    mkdirSync(directoryB);
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    try {
+      const { manager } = managerAt(root, false, false, undefined, undefined, undefined, undefined, "opencode");
+      await manager.resolveSession(context("ses_oc_a", directoryA));
+      const hosts = join(root, "hosts");
+      const control = join(hosts, "ses_control", "muse");
+      mkdirSync(control, { recursive: true });
+      const past = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      utimesSync(join(hosts, "ses_oc_a"), past, past);
+      utimesSync(join(hosts, "ses_control"), past, past);
+
+      await manager.resolveSession(context("ses_oc_b", directoryB));
+
+      expect(existsSync(join(hosts, "ses_oc_a"))).toBe(true);
+      expect(existsSync(join(hosts, "ses_control"))).toBe(false);
       await manager.close();
     } finally {
       if (previousHome === undefined) delete process.env.HOME;

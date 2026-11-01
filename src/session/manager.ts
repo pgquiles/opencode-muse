@@ -261,7 +261,7 @@ export class MuseSessionManager {
       let loopback: LoopbackMcpServer | undefined;
       if (this.toolBackend === "opencode") {
         const stateDirectory = this.options.stateDirectory ?? SessionRegistry.resolveStateDirectory();
-        sweepHostConfigs(stateDirectory, STALE_HOST_CONFIG_MS);
+        sweepHostConfigs(stateDirectory, STALE_HOST_CONFIG_MS, Date.now(), new Set(this.bindings.keys()));
         const hostXdg = writeHostConfig(stateDirectory, context.sessionID, { authSourceDir: userMuseConfigDir() });
         backendEnv = { ...process.env, XDG_CONFIG_HOME: hostXdg };
         // A live same-process binding returns before this point, so a fresh
@@ -543,6 +543,7 @@ export class MuseSessionManager {
             if (typeof tool !== "object" || tool === null) continue;
             const candidate = tool as { name?: unknown; description?: unknown; inputSchema?: unknown };
             if (typeof candidate.name !== "string" || candidate.name.length === 0) continue;
+            if (Array.isArray(candidate.inputSchema)) continue;
             converted.push({
               name: candidate.name,
               description: typeof candidate.description === "string" ? candidate.description : "",

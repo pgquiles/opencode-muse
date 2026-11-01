@@ -590,8 +590,10 @@ export async function runMuseTurn(
                     watcher.wait.then((call) => ({ call })),
                   ]);
                   if ("call" in raced) {
-                    session.takeParkedToolCall?.();
-                    for await (const output of processNotification(syntheticParkedNotification(session, turnId, raced.call))) yield output;
+                    // The destructive take wins over the peeked call: emitting
+                    // the peek would duplicate it when the take drains next.
+                    const taken = session.takeParkedToolCall?.() ?? raced.call;
+                    for await (const output of processNotification(syntheticParkedNotification(session, turnId, taken))) yield output;
                     parkedBreak = true;
                     session.handoffTakeovers = (session.handoffTakeovers ?? 0) + 1;
                     break;

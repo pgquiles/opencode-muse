@@ -145,6 +145,15 @@ describe("loopback MCP bridge", () => {
     }
   });
 
+  test("loopbackMcp.concurrentListenSharesOneServer", async () => {
+    const server = new LoopbackMcpServer({ sessionKey: "ses_loop_twice", tools: TOOLS });
+    servers.push(server);
+    const [first, second] = await Promise.all([server.listen(), server.listen()]);
+
+    expect(first).toBe(second);
+    expect(server.url).toContain(`:${first}/`);
+  });
+
   test("loopbackMcp.closeRejectsParkedCalls", async () => {
     const server = new LoopbackMcpServer({
       sessionKey: "ses_loop_3",

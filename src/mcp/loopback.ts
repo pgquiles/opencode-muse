@@ -87,8 +87,8 @@ export class LoopbackMcpServer {
   }
 
   async listen(): Promise<number> {
-    if (this.address !== "") {
-      return this.listening as Promise<number>;
+    if (this.listening) {
+      return this.listening;
     }
     this.listening = new Promise<number>((resolve, reject) => {
       const server = createServer((request, response) => void this.handle(request, response));

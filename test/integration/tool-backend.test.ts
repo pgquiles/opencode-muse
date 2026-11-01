@@ -121,6 +121,89 @@ describe("opencode backend turn flow", () => {
     expect(session.handoffTakeovers).toBe(1);
   });
 
+  test("toolBackend.watcherTakeWinsOverPeekedCall", async () => {
+    const previous = prompt(["user", "first request"], ["assistant", "first answer"]);
+    const stored = fingerprintTranscript(previous);
+    const calls: string[] = [];
+    let takes = 0;
+    const session: Record<string, unknown> = {
+      host: {
+        mintCommandId: () => "018f4f17-9c2a-7c1a-a0fd-67a19db5d1f",
+        async command(method: string, params: Record<string, unknown>) {
+          calls.push(method);
+          if (method === "turn/start") {
+            return { commandId: params.commandId, disposition: "started", startedNewTurn: true, status: "accepted", turnId: "turn_live" };
+          }
+          return {};
+        },
+        async request() { return {}; },
+        subscribe() {
+          return {
+            [Symbol.asyncIterator]() {
+              let started = false;
+              return {
+                async next() {
+                  if (!started) {
+                    started = true;
+                    return { done: false as const, value: { method: "turn/started", params: { sessionId: "ses_muse_old", turnId: "turn_live", viewCursor: "c1" } } };
+                  }
+                  return new Promise<never>(() => {});
+                },
+                async return() { return { done: true as const, value: undefined }; },
+              };
+            },
+          };
+        },
+      },
+      sessionId: "ses_muse_old",
+      museSessionId: "ses_muse_old",
+      toolBackend: "opencode",
+      previousTranscriptFingerprints: stored,
+      contextAllowlist: [],
+      sessionNotices: [],
+      compactionFingerprints: [],
+      emittedApprovalPrompts: new Set<string>(),
+      handoffTakeovers: 0,
+      streamEpoch: 0,
+      currentSelection: selection,
+      async recordPendingCommand() {},
+      async clearPendingCommand() {},
+      async recordTurnAccepted() {},
+      async updateCursor() {},
+      async recordTurnCompleted() {},
+      async commitTranscriptFingerprints() {},
+      async release() {},
+      // Sync check sees nothing; the watcher then peeks call A while the
+      // destructive take drains call B. The take wins: emitting the peeked
+      // call would duplicate it when B is taken next.
+      takeParkedToolCall() {
+        takes += 1;
+        if (takes < 2) return undefined;
+        return { callId: "mc_b", toolName: "opencode_write", args: { path: "b.txt" } };
+      },
+      watchParkedToolCall: () => ({
+        wait: Promise.resolve({ callId: "mc_a", toolName: "opencode_write", args: { path: "a.txt" } }),
+        cancel: () => {},
+      }),
+      syncLoopbackTools: () => {},
+    };
+    const runtime: MuseLanguageRuntime = {
+      selectionIndex: new Map([[modelId, selection]]),
+      async resolveSession() { return session as never; },
+      previousTranscriptFingerprints: () => stored,
+    };
+    const model = createMuseLanguageModel(runtime, modelId);
+    const parts = await collect((await model.doStream({
+      prompt: [...previous, ...prompt(["user", "write it"])],
+      headers: headers("ses_oc_1"),
+    } as never)).stream as ReadableStream<unknown>);
+
+    const toolCalls = parts.filter((part) => part.type === "tool-call");
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0]).toMatchObject({ toolCallId: "mc_b" });
+    expect(session.handoffTakeovers).toBe(1);
+  });
+
   test("toolBackend.attachResolvesParkedAndDrainsWithoutNewTurn", async () => {
     const history = prompt(
       ["user", "first request"],
