@@ -38,6 +38,7 @@ import {
 } from "../msp/worktree.js";
 import {
   MspCommandRejectedError,
+  MuseInvalidConfigError,
   MuseRecoveryChoiceRequiredError,
   MuseUnsupportedInputError,
   MuseUnsupportedRequestError,
@@ -59,6 +60,22 @@ export interface MuseSessionHost extends Pick<MspHost, "command" | "request" | "
 
 /** Host configs older than this are crashed-process leftovers (Pi parity). */
 const STALE_HOST_CONFIG_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Opencode backend (#37): session/start and session/resume carry the
+ * loopback mcpServers config, which requires the sessionMcp grant. A
+ * capabilityRequired rejection means the host cannot run this backend —
+ * fail with a clear error naming the grant, never fall back to Muse tools.
+ * Without a loopback config (muse backend) every rejection passes through
+ * untouched.
+ */
+function rethrowMissingSessionMcp(error: unknown, backendConfig: Record<string, unknown> | undefined): void {
+  if (backendConfig && error instanceof MspCommandRejectedError && error.mspKind === "capabilityRequired") {
+    throw new MuseInvalidConfigError(
+      "The opencode tool backend requires the sessionMcp capability, but the Muse host did not grant it (session/start or session/resume was rejected as capabilityRequired). The muse backend is unaffected.",
+    );
+  }
+}
 
 export interface MuseSessionManagerOptions {
   stateDirectory?: string;
@@ -279,7 +296,15 @@ export class MuseSessionManager {
         cwd: canonicalDirectory,
         args: baseServeArgs(stored?.providerId ?? selected.providerId, this.contributorMode),
         env: backendEnv,
-        capabilities: { userInputDialogs: false, experimentalApi: true },
+        capabilities: {
+          userInputDialogs: false,
+          experimentalApi: true,
+          // Opencode backend (#37): advertising loopback mcpServers on
+          // session/start requires the sessionMcp grant; without it the CLI
+          // rejects the start as capabilityRequired. The muse backend keeps
+          // its exact previous handshake.
+          ...(this.toolBackend === "opencode" ? { requestedCapabilities: ["sessionMcp"] } : {}),
+        },
       });
       const durability = host.initializeResult.sessionDurability;
       if (stored && durability === "ephemeral") throw new MuseRecoveryChoiceRequiredError();
@@ -324,6 +349,9 @@ export class MuseSessionManager {
           // A restarted bridge brings a fresh loopback URL; the resumed
           // session must point at the live one.
           ...(backendConfig ? { config: backendConfig } : {}),
+        }).catch((error: unknown) => {
+          rethrowMissingSessionMcp(error, backendConfig);
+          throw error;
         });
         const resumedSession = resumed.session as { activeTurnId?: unknown } | undefined;
         if (!resumedSession || !Object.hasOwn(resumedSession, "activeTurnId") || resumedSession.activeTurnId !== null) {
@@ -370,6 +398,10 @@ export class MuseSessionManager {
           try {
             start = await host.command("session/start", { ...startParams, worktree: { mode: "create" } });
           } catch (error) {
+            // A missing sessionMcp grant fails fast with a clear error: the
+            // retry below drops only the worktree parameter, so it would hit
+            // the same rejection.
+            rethrowMissingSessionMcp(error, backendConfig);
             // A rejected worktree-bearing start is retried once without the
             // worktree parameter: non-git checkouts, Subversion/Mercurial and
             // plain directories, and untrusted workspaces all surface under
@@ -391,7 +423,10 @@ export class MuseSessionManager {
             );
           }
         } else {
-          start = await host.command("session/start", startParams);
+          start = await host.command("session/start", startParams).catch((error: unknown) => {
+            rethrowMissingSessionMcp(error, backendConfig);
+            throw error;
+          });
         }
         const startedSessionId = sessionIdFrom(start);
         if (!startedSessionId) throw new MuseRecoveryChoiceRequiredError();

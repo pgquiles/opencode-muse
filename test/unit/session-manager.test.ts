@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { SessionRegistry } from "../../src/session/registry.js";
 import { WorkspaceLock } from "../../src/session/workspace-lock.js";
 import { MuseSessionManager } from "../../src/session/manager.js";
-import { MspCommandTimeoutError, WorkspaceBusyError, MuseRecoveryChoiceRequiredError } from "../../src/errors.js";
+import { MspCommandRejectedError, MspCommandTimeoutError, MuseInvalidConfigError, WorkspaceBusyError, MuseRecoveryChoiceRequiredError } from "../../src/errors.js";
 import { ApprovalExchange } from "../../src/msp/approvals.js";
 import { UserInputExchange } from "../../src/msp/user-input.js";
 import type { ContributorMode } from "../../src/msp/contributor.js";
@@ -54,6 +54,7 @@ function managerAt(
   closeGate?: { started(): void; wait: Promise<void> },
   contributorMode?: ContributorMode,
   toolBackend?: "muse" | "opencode",
+  rejectCommands?: Record<string, { code: number; kind: string }>,
 ) {
   let id = 0;
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -83,6 +84,8 @@ function managerAt(
         userInput,
         async command(method: string, params: Record<string, unknown>) {
           calls.push({ method, params });
+          const rejection = rejectCommands?.[method];
+          if (rejection) throw new MspCommandRejectedError(method, rejection.code, rejection.kind);
           if (failSetModel && method === "session/setModel") {
             throw new MspCommandTimeoutError(method, 10);
           }
@@ -1204,6 +1207,7 @@ describe("rewind/fork anchors and explicit-cut fork", () => {
       expect(servers?.["opencode-loopback"]?.headers?.Authorization).toMatch(/^Bearer [0-9a-f]{48}$/);
       expect(servers?.["opencode-loopback"]?.mode).toBe("required");
       expect(String(hostOptions[0]?.env?.XDG_CONFIG_HOME ?? "")).toContain(join("hosts", "ses_oc_1"));
+      expect(hostOptions[0]?.capabilities).toMatchObject({ requestedCapabilities: ["sessionMcp"] });
       expect(binding.sessionId).toMatch(/^ses_muse_/);
       await binding.release?.();
       await manager.close();
@@ -1265,6 +1269,70 @@ describe("rewind/fork anchors and explicit-cut fork", () => {
     }
   });
 
+  test("sessionManager.opencodeBackendStartNamesMissingSessionMcpGrant", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    try {
+      const { manager } = managerAt(root, false, false, undefined, undefined, undefined, undefined, "opencode", {
+        "session/start": { code: -32010, kind: "capabilityRequired" },
+      });
+      await expect(manager.resolveSession(context("ses_oc_1", directory))).rejects.toThrow(/sessionMcp/);
+      await manager.close();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+  });
+
+  test("sessionManager.opencodeBackendResumeNamesMissingSessionMcpGrant", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const registry = new SessionRegistry({ stateDirectory: root });
+    await registry.put({
+      openCodeSessionId: "ses_oc_1",
+      museSessionId: "ses_muse_old",
+      hostId: "host_seed",
+      workspaceFingerprint: workspaceFingerprint(directory),
+      providerId: "meta",
+      modelId: "wonder",
+      transcriptFingerprints: [],
+      compactionFingerprints: [],
+      pendingCommands: {},
+    } as never);
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    try {
+      const { manager } = managerAt(root, false, false, undefined, undefined, undefined, undefined, "opencode", {
+        "session/resume": { code: -32010, kind: "capabilityRequired" },
+      });
+      await expect(manager.resolveSession(context("ses_oc_1", directory))).rejects.toThrow(/sessionMcp/);
+      await manager.close();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+  });
+
+  test("sessionManager.museBackendStartRejectionStaysUntouched", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const { manager } = managerAt(root, false, false, undefined, undefined, undefined, undefined, undefined, {
+      "session/start": { code: -32010, kind: "capabilityRequired" },
+    });
+    const error = await manager.resolveSession(context("ses_oc_1", directory)).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(MspCommandRejectedError);
+    expect(error).not.toBeInstanceOf(MuseInvalidConfigError);
+    await manager.close();
+  });
+
   test("sessionManager.museBackendOmitsLoopbackConfig", async () => {
     const root = tempRoot();
     const directory = join(root, "project");
@@ -1276,6 +1344,7 @@ describe("rewind/fork anchors and explicit-cut fork", () => {
     expect(start?.params).toMatchObject({ approvalMode: "onRequest" });
     expect("config" in (start?.params ?? {})).toBe(false);
     expect(hostOptions[0]?.env).toBeUndefined();
+    expect((hostOptions[0]?.capabilities as { requestedCapabilities?: unknown } | undefined)?.requestedCapabilities).toBeUndefined();
     expect(binding.sessionId).toMatch(/^ses_muse_/);
     await binding.release?.();
     await manager.close();
