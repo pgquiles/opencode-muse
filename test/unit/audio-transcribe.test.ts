@@ -55,6 +55,31 @@ describe("audio transcription via muse voice transcribe", () => {
     expect(existsSync(dirname(seen[0]!.clipPath))).toBe(false);
   });
 
+  test("transcribe.spawnReceivesSanitizedChildEnv", async () => {
+    let seenEnv: Record<string, string | undefined> | undefined;
+    const spawn: TranscribeSpawn = async (_bin, _clip, _timeout, env) => {
+      seenEnv = { ...env };
+      return { exit: 0, stdout: "hello\n", stderr: "" };
+    };
+    const transcribe = createCliTranscriber({ spawn });
+    const previousKey = process.env.META_API_KEY;
+    const previousMode = process.env.MUSE_CONTRIBUTOR_MODE;
+    process.env.META_API_KEY = "secret";
+    process.env.MUSE_CONTRIBUTOR_MODE = "off";
+    try {
+      const result = await transcribe(Uint8Array.from([1, 2, 3, 4]), "audio/wav");
+      expect(result).toEqual({ ok: true, transcript: "hello" });
+    } finally {
+      if (previousKey === undefined) delete process.env.META_API_KEY;
+      else process.env.META_API_KEY = previousKey;
+      if (previousMode === undefined) delete process.env.MUSE_CONTRIBUTOR_MODE;
+      else process.env.MUSE_CONTRIBUTOR_MODE = previousMode;
+    }
+    expect(seenEnv?.META_API_KEY).toBeUndefined();
+    expect(seenEnv?.MUSE_CONTRIBUTOR_MODE).toBeUndefined();
+    expect(seenEnv?.MUSE_NO_AUTO_UPDATE).toBe("1");
+  });
+
   test("transcribe.unreadableClipFailsLoudlyWithCleanup", async () => {
     let clipPath = "";
     const spawn: TranscribeSpawn = async (_bin, clip, _timeout) => {

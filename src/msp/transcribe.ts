@@ -38,6 +38,8 @@ export type TranscribeSpawn = (
   museBin: string,
   clipPath: string,
   timeoutMs: number,
+  /** Sanitized child env; the default runner computes it from the process env. */
+  env?: NodeJS.ProcessEnv,
 ) => Promise<TranscribeSpawnResult>;
 
 export interface CliTranscriberOptions {
@@ -87,12 +89,17 @@ export function wavDurationMs(bytes: Uint8Array): number | undefined {
   return Math.round((dataSize / bytesPerSecond) * 1000);
 }
 
-function defaultSpawn(museBin: string, clipPath: string, timeoutMs: number): Promise<TranscribeSpawnResult> {
+function defaultSpawn(
+  museBin: string,
+  clipPath: string,
+  timeoutMs: number,
+  env: NodeJS.ProcessEnv = museChildEnv(process.env),
+): Promise<TranscribeSpawnResult> {
   return new Promise((resolve) => {
     // The deadline is enforced by the timer below (not the spawn `timeout`
     // option) so a kill is always recorded as a timeout, never as a bare
     // null exit.
-    const child = spawn(museBin, ["voice", "transcribe", clipPath], { env: museChildEnv(process.env) });
+    const child = spawn(museBin, ["voice", "transcribe", clipPath], { env });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
@@ -135,7 +142,7 @@ export function createCliTranscriber(options: CliTranscriberOptions = {}): Trans
       const timer = setTimeout(fireTimeout, timeoutMs);
       let result: TranscribeSpawnResult;
       try {
-        result = await Promise.race([run(museBin, clipPath, timeoutMs), timeoutPromise]);
+        result = await Promise.race([run(museBin, clipPath, timeoutMs, museChildEnv(process.env)), timeoutPromise]);
       } catch {
         clearTimeout(timer);
         return { ok: false, code: "transcription-failed" };
