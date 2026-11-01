@@ -149,4 +149,10 @@ const defaultSystemPrompt = [
   "Wait for each tool call to return before continuing the turn.",
 ].join("\n");
 
-const defaultToolset: string[] = [];
+/**
+ * Default toolset: the whole loopback namespace. Per-turn tool names do not
+ * exist yet when the config is written, so only a namespace glob admits the
+ * bridge (probe precedent: server `probe` serves `mcp__probe__*`). An empty
+ * allowlist gates every tool off — native and loopback alike.
+ */
+const defaultToolset: string[] = ["mcp__opencode-loopback__*"];
