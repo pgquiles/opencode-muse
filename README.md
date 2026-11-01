@@ -39,6 +39,10 @@ export { default } from "opencode-muse";
 EOF
 ```
 
+Use either the `plugins` array entry or the shim file, never both.
+Registering the same plugin twice makes OpenCode report `Duplicate plugin
+ID: opencode-muse` and mark it failed (observed on 2.2.5).
+
 The locally packed package passed provider discovery and a text-turn smoke
 test. Muse models and a text turn were also confirmed in OpenChamber after
 restarting it. Verified Muse CLI versions are 1.4.12 and 1.4.13 (the SDK
