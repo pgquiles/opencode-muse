@@ -22,6 +22,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "bun test ./test/run.ts",
+    "probe:host-override": "bun test/probes/msp-host-override.ts",
     "prepublishOnly": "npm run build"
   },
   "repository": {
