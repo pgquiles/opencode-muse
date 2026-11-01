@@ -219,6 +219,7 @@ async function main(): Promise<void> {
 
     // Checks 1+2 share one session: override on the first turn, rawLog on the second.
     let sessionId = "";
+    let firstTurnId = "";
     let secondTurnId = "";
     {
       const host = await openHost();
@@ -229,7 +230,7 @@ async function main(): Promise<void> {
         fake.queue(() => reply({ text: "hello from muse" }));
         {
           const before = fake.bodies.length;
-          await runTurn(host.connection, host.collector, sessionId, "first");
+          firstTurnId = (await runTurn(host.connection, host.collector, sessionId, "first")).turnId;
           assert(fake.bodies.length - before === 1, "override", `expected 1 model request, saw ${fake.bodies.length - before}`);
           const body = fake.bodies[before]!;
           assert(body.instructions === SYSTEM, "override", "model instructions are not the host prompt");
@@ -297,16 +298,48 @@ async function main(): Promise<void> {
     }
 
     // Check 4: fork at the completed tool turn branches cleanly.
+    let forkId = "";
+    let branchedTurnId = "";
     {
       const host = await openHost();
       try {
         const forked = (await host.connection.command("session/fork", { sessionId, cutPoint: { lastTurnId: secondTurnId }, excludeItems: true })) as any;
-        const forkId = forked?.session?.sessionId;
+        forkId = forked?.session?.sessionId;
         assert(typeof forkId === "string" && forkId !== sessionId, "fork", "session/fork did not branch");
         fake.queue(() => reply({ text: "branched" }));
-        await runTurn(host.connection, host.collector, forkId, "other second");
+        branchedTurnId = (await runTurn(host.connection, host.collector, forkId, "other second")).turnId;
         const users = roleTexts(fake.bodies[fake.bodies.length - 1]!, "user");
         assert(JSON.stringify(users) === JSON.stringify(["first", "second", "other second"]), "fork", `fork did not branch cleanly: ${JSON.stringify(users)}`);
+      } finally {
+        await host.spawned.close().catch(() => {});
+        await host.spawned.exited.catch(() => {});
+      }
+    }
+
+    // Check 4b: pre-fork turn ids must NOT survive a fork (anchors die with
+    // the fork, so the bridge drops them on re-point), while the fork's own
+    // new turns stay forkable (rewind chains keep working past the fork).
+    let forkOfFork = false;
+    {
+      const host = await openHost();
+      try {
+        let rejected = false;
+        try {
+          await host.connection.command("session/fork", { sessionId: forkId, cutPoint: { lastTurnId: firstTurnId }, excludeItems: true });
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          rejected = /InvalidCut|forkBoundaryInvalid|invalid fork boundary/i.test(detail);
+          if (!rejected) throw error;
+        }
+        assert(rejected, "fork-of-fork", "pre-fork turn id still accepted after a fork");
+        const reforked = (await host.connection.command("session/fork", { sessionId: forkId, cutPoint: { lastTurnId: branchedTurnId }, excludeItems: true })) as any;
+        const reforkId = reforked?.session?.sessionId;
+        assert(typeof reforkId === "string" && reforkId !== forkId, "fork-of-fork", "session/fork of a fork did not branch");
+        fake.queue(() => reply({ text: "re-branched" }));
+        await runTurn(host.connection, host.collector, reforkId, "third");
+        const users = roleTexts(fake.bodies[fake.bodies.length - 1]!, "user");
+        assert(JSON.stringify(users) === JSON.stringify(["first", "second", "other second", "third"]), "fork-of-fork", `fork of a fork did not continue cleanly: ${JSON.stringify(users)}`);
+        forkOfFork = true;
       } finally {
         await host.spawned.close().catch(() => {});
         await host.spawned.exited.catch(() => {});
@@ -368,7 +401,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({
       ok: true,
       museVersion,
-      checks: { override: true, rawLog: true, resume: true, fork: true, steer: true },
+      checks: { override: true, rawLog: true, resume: true, fork: true, forkOfFork, steer: true },
     }));
   } finally {
     cleanup();

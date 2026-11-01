@@ -205,7 +205,7 @@ export class MuseRecoveryChoiceRequiredError extends MuseBridgeError {
 
 export class MuseTranscriptDivergedError extends MuseBridgeError {
   constructor() {
-    super("MUSE_TRANSCRIPT_DIVERGED", "OpenCode history diverged from the mapped Muse session; start a fresh Muse session or recover it explicitly", false);
+    super("MUSE_TRANSCRIPT_DIVERGED", "OpenCode history diverged from the mapped Muse session; start a fresh Muse session or recover it explicitly. Rewind is conversation-only: files Muse already changed are not rolled back, and the pre-rewind Muse session stays in your Muse home", false);
     this.name = "MuseTranscriptDivergedError";
   }
 }

@@ -208,4 +208,29 @@ describe("SessionRegistry", () => {
     expect(existsSync(join(dataRoot, "sessions"))).toBe(true);
     expect(existsSync(join(museConfig, "sessions"))).toBe(false);
   });
+
+  test("sessionRegistry.roundTripsTurnAnchors", async () => {
+    const root = makeRoot();
+    const registry = new SessionRegistry({ stateDirectory: root });
+    const anchors = [
+      { sequenceLength: 2, turnId: "turn_1" },
+      { sequenceLength: 4, turnId: "turn_2" },
+    ];
+
+    await registry.put(entry({ turnAnchors: anchors }));
+
+    expect((await registry.get("ses_opencode_1", workspaceA))?.turnAnchors).toEqual(anchors);
+  });
+
+  test("sessionRegistry.rejectsInvalidTurnAnchors", async () => {
+    const root = makeRoot();
+    const registry = new SessionRegistry({ stateDirectory: root });
+
+    await expect(registry.put(entry({ turnAnchors: [{ sequenceLength: -1, turnId: "turn_1" }] })))
+      .rejects.toBeInstanceOf(RegistryValidationError);
+    await expect(registry.put(entry({ turnAnchors: [{ sequenceLength: 2, turnId: "" }] })))
+      .rejects.toBeInstanceOf(RegistryValidationError);
+    await expect(registry.put(entry({ turnAnchors: "turn_1" })))
+      .rejects.toBeInstanceOf(RegistryValidationError);
+  });
 });

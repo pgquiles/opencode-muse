@@ -43,7 +43,7 @@ import {
   RegistryWorkspaceMismatchError,
   WorkspaceBusyError,
 } from "../errors.js";
-import type { PendingCommandRecord, SessionRegistry, SessionRegistryEntry } from "./registry.js";
+import type { PendingCommandRecord, SessionRegistry, SessionRegistryEntry, TurnAnchor } from "./registry.js";
 import type { LockLease, WorkspaceLock } from "./workspace-lock.js";
 import type { MuseTurnSession } from "../model/language-model.js";
 import type { AgentContextResult } from "../model/agent-context.js";
@@ -74,6 +74,9 @@ interface ManagedBinding extends Omit<MuseTurnSession, "host"> {
   transcriptFingerprints: string[];
   compactionFingerprints: string[];
   pendingCommands: Record<string, PendingCommandRecord>;
+  turnAnchors: TurnAnchor[];
+  /** Accepted but not yet completed turn: the anchor candidate. Cleared on unclean completion. */
+  pendingAnchorTurnId?: string;
   activeTurnId?: string;
   /** Set when the next call must attach to this parked Muse turn. */
   joinParkedTurnId?: string;
@@ -152,7 +155,7 @@ export class MuseSessionManager {
 
   async resolveSession(
     context: RequestContext,
-    options?: { verdictConsumed?: boolean },
+    options?: { verdictConsumed?: boolean; incomingFingerprints?: readonly string[] },
   ): Promise<MuseTurnSession> {
     if (this.closed) throw new MuseUnsupportedRequestError("plugin-closed");
     if (context.kind !== "primary") throw new MuseUnsupportedRequestError(context.kind);
@@ -243,15 +246,37 @@ export class MuseSessionManager {
       if (stored && durability === "ephemeral") throw new MuseRecoveryChoiceRequiredError();
 
       const experimentalWorktrees = host.initializeResult.experimentalApi === true;
-      let museSessionId: string;
+      let museSessionId: string | undefined;
       let viewCursor: string | undefined;
       let replayAfterCursor: string | undefined;
+      let adoptedAnchors: TurnAnchor[] | undefined;
+      let adoptedPrevious: readonly string[] | undefined;
       let worktree: ManagedWorktree | undefined;
       // First-turn bridge context (approval instruction first, then any
       // worktree notices). Only new bindings get notices; re-resolves reuse
       // the binding's list, and resumed sessions with history skip them.
       const sessionNotices: string[] = [APPROVAL_BRIDGE_INSTRUCTION];
-      if (stored && durability !== "ephemeral") {
+      let adoptedFork = false;
+      if (!stored) {
+        // No mapping for this OpenCode session: a transcript that uniquely
+        // matches a known session's retained history is an OpenCode fork, so
+        // adopt it by forking that Muse session instead of starting blank.
+        // The fork gets no anchors: pre-fork turn ids do not survive a fork
+        // (offline probe), so turns re-anchor as they complete on the fork.
+        const incoming = options?.incomingFingerprints;
+        const adoption = await this.findForkAdoption(fingerprint, incoming);
+        if (adoption && incoming) {
+          const forked = await this.forkViaHost(host, adoption.sourceMuseSessionId, adoption.cutTurnId);
+          if (forked) {
+            museSessionId = forked.sessionId;
+            viewCursor = forked.viewCursor;
+            adoptedAnchors = [];
+            adoptedPrevious = [...incoming];
+            adoptedFork = true;
+          }
+        }
+      }
+      if (!adoptedFork && stored && durability !== "ephemeral") {
         const resumed = await host.command("session/resume", {
           commandId: host.mintCommandId(),
           sessionId: stored.museSessionId,
@@ -279,7 +304,7 @@ export class MuseSessionManager {
             // The session runs on; the label stays absent.
           }
         }
-      } else {
+      } else if (!adoptedFork) {
         const startParams = {
           commandId: host.mintCommandId(),
           workspaceRoot: canonicalDirectory,
@@ -350,6 +375,9 @@ export class MuseSessionManager {
         }
       }
 
+      // Adoption, resume, and start each assign the Muse session above; an
+      // unassigned id here means none of the paths produced one.
+      if (museSessionId === undefined) throw new MuseRecoveryChoiceRequiredError();
       const initialSelection = stored
         ? { providerId: stored.providerId ?? selected.providerId, modelId: stored.modelId ?? selected.modelId, profileId: stored.profileId ?? null }
         : { providerId: selected.providerId, modelId: selected.modelId, profileId: null };
@@ -367,10 +395,11 @@ export class MuseSessionManager {
         emittedApprovalPrompts: new Set<string>(),
         streamEpoch: 0,
         currentSelection: initialSelection,
-        previousTranscriptFingerprints: stored?.transcriptFingerprints ?? [],
-        transcriptFingerprints: stored?.transcriptFingerprints ?? [],
+        previousTranscriptFingerprints: adoptedPrevious ? [...adoptedPrevious] : stored?.transcriptFingerprints ?? [],
+        transcriptFingerprints: adoptedPrevious ? [...adoptedPrevious] : stored?.transcriptFingerprints ?? [],
         compactionFingerprints: stored?.compactionFingerprints ?? [],
         pendingCommands: stored?.pendingCommands ?? {},
+        turnAnchors: adoptedAnchors ? [...adoptedAnchors] : stored?.turnAnchors ? [...stored.turnAnchors] : [],
         contextAllowlist: sessionContext?.supported ? sessionContext.fragments.map((fragment) => ({ ...fragment })) : [],
         contextError: sessionContext?.supported ? undefined : "agent-instructions-unrepresentable",
         lease,
@@ -384,9 +413,12 @@ export class MuseSessionManager {
         },
         async recordTurnAccepted(_commandId, turnId) {
           const previous = binding.activeTurnId;
+          const previousAnchor = binding.pendingAnchorTurnId;
           binding.activeTurnId = turnId;
+          binding.pendingAnchorTurnId = turnId;
           try { await persist(); } catch (error) {
             binding.activeTurnId = previous;
+            binding.pendingAnchorTurnId = previousAnchor;
             throw error;
           }
         },
@@ -405,15 +437,18 @@ export class MuseSessionManager {
         async recordTurnCompleted(_turnId, _terminal) {
           const previousActive = binding.activeTurnId;
           const previousPending = binding.pendingCommands;
+          const previousAnchor = binding.pendingAnchorTurnId;
           binding.activeTurnId = undefined;
           binding.replayAfterCursor = undefined;
           binding.pendingCommands = {};
           binding.joinParkedTurnId = undefined;
           binding.handoffTakeovers = 0;
           binding.emittedApprovalPrompts = new Set<string>();
+          if (_terminal !== "completed") binding.pendingAnchorTurnId = undefined;
           try { await persist(); } catch (error) {
             binding.activeTurnId = previousActive;
             binding.pendingCommands = previousPending;
+            binding.pendingAnchorTurnId = previousAnchor;
             throw error;
           }
         },
@@ -431,13 +466,32 @@ export class MuseSessionManager {
           const previousTranscript = binding.transcriptFingerprints;
           const previousFingerprints = binding.previousTranscriptFingerprints;
           const previousCompactions = binding.compactionFingerprints;
+          const previousAnchors = binding.turnAnchors;
+          const anchorTurnId = binding.pendingAnchorTurnId;
           binding.transcriptFingerprints = [...fingerprints];
           binding.previousTranscriptFingerprints = [...fingerprints];
           binding.compactionFingerprints = [];
+          if (anchorTurnId !== undefined) {
+            binding.pendingAnchorTurnId = undefined;
+            const isExtension = previousTranscript.length <= fingerprints.length
+              && previousTranscript.every((value, index) => fingerprints[index] === value);
+            if (isExtension) {
+              const last = binding.turnAnchors[binding.turnAnchors.length - 1];
+              binding.turnAnchors = last?.sequenceLength === fingerprints.length
+                ? [...binding.turnAnchors.slice(0, -1), { sequenceLength: fingerprints.length, turnId: anchorTurnId }]
+                : [...binding.turnAnchors, { sequenceLength: fingerprints.length, turnId: anchorTurnId }];
+            } else {
+              // Compaction-style history replacement: earlier turn ids no
+              // longer address this history, so re-anchor from this turn.
+              binding.turnAnchors = [{ sequenceLength: fingerprints.length, turnId: anchorTurnId }];
+            }
+          }
           try { await persist(); } catch (error) {
             binding.transcriptFingerprints = [...previousTranscript];
             binding.previousTranscriptFingerprints = [...previousFingerprints];
             binding.compactionFingerprints = [...previousCompactions];
+            binding.turnAnchors = previousAnchors;
+            binding.pendingAnchorTurnId = anchorTurnId;
             throw error;
           }
         },
@@ -458,6 +512,148 @@ export class MuseSessionManager {
       if (host) await host.close().catch(() => {});
       throw error;
     }
+  }
+
+  /**
+   * Fork the mapped Muse session at the retained transcript boundary (#20).
+   * Only an explicit, uniquely anchored cut point forks: an active turn, any
+   * pending command other than a matching earlier fork attempt, a retained
+   * length outside the stored history, or anything but exactly one anchor at
+   * that length reports `{ forked: false }` and sends nothing. The orphaned
+   * pre-rewind session is left to the user's Muse home: MSP has no delete.
+   */
+  async forkSessionAtBoundary(openCodeSessionId: string, retainedLength: number): Promise<{ forked: true } | { forked: false }> {
+    const binding = this.bindings.get(openCodeSessionId);
+    if (!binding) return { forked: false };
+    if (binding.activeTurnId !== undefined) return { forked: false };
+    const unrelatedPending = Object.values(binding.pendingCommands).some((command) => command.method !== "session/fork");
+    if (unrelatedPending) return { forked: false };
+    if (retainedLength < 1 || retainedLength >= binding.transcriptFingerprints.length) return { forked: false };
+    const cuts = binding.turnAnchors.filter((anchor) => anchor.sequenceLength === retainedLength);
+    if (cuts.length !== 1) return { forked: false };
+    const forked = await this.forkViaBinding(binding, cuts[0]!.turnId);
+    if (!forked) return { forked: false };
+    // Forks do not preserve source turn ids (offline probe: fork-of-fork at
+    // a pre-fork id fails InvalidCut), so every carried anchor would address
+    // a dead turn. Drop them: turns completed after the fork re-anchor, and
+    // rewinding into pre-fork history stays a fail-closed fresh-session error.
+    const previous = {
+      sessionId: binding.sessionId,
+      museSessionId: binding.museSessionId,
+      viewCursor: binding.viewCursor,
+      replayAfterCursor: binding.replayAfterCursor,
+      joinParkedTurnId: binding.joinParkedTurnId,
+      handoffTakeovers: binding.handoffTakeovers,
+      emittedApprovalPrompts: binding.emittedApprovalPrompts,
+      turnAnchors: binding.turnAnchors,
+      transcriptFingerprints: binding.transcriptFingerprints,
+      previousTranscriptFingerprints: binding.previousTranscriptFingerprints,
+    };
+    const retained = previous.transcriptFingerprints.slice(0, retainedLength);
+    binding.sessionId = forked.sessionId;
+    binding.museSessionId = forked.sessionId;
+    binding.viewCursor = forked.viewCursor;
+    binding.replayAfterCursor = undefined;
+    binding.joinParkedTurnId = undefined;
+    binding.handoffTakeovers = 0;
+    binding.emittedApprovalPrompts = new Set<string>();
+    binding.turnAnchors = [];
+    binding.transcriptFingerprints = retained;
+    binding.previousTranscriptFingerprints = [...retained];
+    try {
+      await this.persistBinding(openCodeSessionId, binding);
+    } catch (error) {
+      binding.sessionId = previous.sessionId;
+      binding.museSessionId = previous.museSessionId;
+      binding.viewCursor = previous.viewCursor;
+      binding.replayAfterCursor = previous.replayAfterCursor;
+      binding.joinParkedTurnId = previous.joinParkedTurnId;
+      binding.handoffTakeovers = previous.handoffTakeovers;
+      binding.emittedApprovalPrompts = previous.emittedApprovalPrompts;
+      binding.turnAnchors = previous.turnAnchors;
+      binding.transcriptFingerprints = previous.transcriptFingerprints;
+      binding.previousTranscriptFingerprints = previous.previousTranscriptFingerprints;
+      throw error;
+    }
+    return { forked: true };
+  }
+
+  private async forkViaBinding(binding: ManagedBinding, cutTurnId: string | undefined):
+    Promise<{ sessionId: string; viewCursor?: string } | undefined> {
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify({ method: "session/fork", sessionId: binding.museSessionId, cutTurnId: cutTurnId ?? null }))
+      .digest("hex");
+    const pending = Object.entries(binding.pendingCommands)
+      .find(([, command]) => command.method === "session/fork" && command.fingerprint === fingerprint);
+    const commandId = pending?.[0] ?? binding.host.mintCommandId();
+    // MSP treats id+payload as the idempotency key: a retry after an
+    // ambiguous failure replays the same command and the server answers
+    // with the original fork instead of branching a second one.
+    if (!pending) await binding.recordPendingCommand?.({ commandId, method: "session/fork", fingerprint });
+    let result: Record<string, unknown>;
+    try {
+      const params: { commandId: string; sessionId: string; cutPoint?: { lastTurnId: string } } =
+        { commandId, sessionId: binding.museSessionId };
+      if (cutTurnId !== undefined) params.cutPoint = { lastTurnId: cutTurnId };
+      result = await binding.host.command("session/fork", params) as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+    const sessionId = sessionIdFrom(result);
+    if (!sessionId) return undefined;
+    try {
+      await binding.clearPendingCommand?.(commandId);
+    } catch {
+      // The fork landed but the pending mark could not clear: a later
+      // retry reuses the same command id and rejoins this fork.
+      return undefined;
+    }
+    return { sessionId, viewCursor: cursorFrom(result) };
+  }
+
+  private async forkViaHost(host: MuseSessionHost, sourceMuseSessionId: string, cutTurnId: string | undefined):
+    Promise<{ sessionId: string; viewCursor?: string } | undefined> {
+    let result: Record<string, unknown>;
+    try {
+      const params: { commandId: string; sessionId: string; cutPoint?: { lastTurnId: string } } =
+        { commandId: host.mintCommandId(), sessionId: sourceMuseSessionId };
+      if (cutTurnId !== undefined) params.cutPoint = { lastTurnId: cutTurnId };
+      result = await host.command("session/fork", params) as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+    const sessionId = sessionIdFrom(result);
+    if (!sessionId) return undefined;
+    return { sessionId, viewCursor: cursorFrom(result) };
+  }
+
+  /**
+   * OpenCode-fork adoption: a session with no stored mapping whose incoming
+   * transcript uniquely matches one known session's retained history forks
+   * that Muse session — a full copy at the tip, an explicit cut below it.
+   * Anything else (no match, several matches, a mid-turn prefix with no
+   * anchor) stays a fresh session; recovery-quarantined entries are never
+   * listed, so the fresh path there is unchanged.
+   */
+  private async findForkAdoption(workspaceFingerprintValue: string, incoming: readonly string[] | undefined):
+    Promise<{ sourceMuseSessionId: string; cutTurnId?: string } | undefined> {
+    if (!incoming || incoming.length === 0) return undefined;
+    const entries = await this.options.registry.list();
+    const matches = entries.filter((entry) =>
+      entry.workspaceFingerprint === workspaceFingerprintValue
+      && entry.transcriptFingerprints.length >= incoming.length
+      && incoming.every((value, index) => entry.transcriptFingerprints[index] === value));
+    if (matches.length !== 1) return undefined;
+    const source = matches[0]!;
+    if (incoming.length === source.transcriptFingerprints.length) {
+      return { sourceMuseSessionId: source.museSessionId };
+    }
+    const cuts = source.turnAnchors.filter((anchor) => anchor.sequenceLength === incoming.length);
+    if (cuts.length !== 1) return undefined;
+    return {
+      sourceMuseSessionId: source.museSessionId,
+      cutTurnId: cuts[0]!.turnId,
+    };
   }
 
   /**
@@ -924,6 +1120,7 @@ export class MuseSessionManager {
       transcriptFingerprints: binding.transcriptFingerprints,
       compactionFingerprints: binding.compactionFingerprints,
       pendingCommands: binding.pendingCommands,
+      turnAnchors: binding.turnAnchors,
     });
   }
 }

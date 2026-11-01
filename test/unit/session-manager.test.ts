@@ -94,6 +94,14 @@ function managerAt(
             };
           }
           if (method === "session/setModel") return { commandId: params.commandId, status: "accepted" };
+          if (method === "session/fork") {
+            return {
+              session: { sessionId: `ses_muse_fork_${calls.length}`, activeTurnId: null },
+              viewCursor: "fork-head",
+              history: {},
+              pendingRequests: [],
+            };
+          }
           return {};
         },
         async request() { return {}; },
@@ -1027,6 +1035,165 @@ describe("MuseSessionManager", () => {
     expect(first.joinParkedTurnId).toBe("turn-1");
     manager.disarmParkedJoin("ses_oc_1");
     expect(first.joinParkedTurnId).toBeUndefined();
+    await manager.close();
+  });
+});
+
+describe("rewind/fork anchors and explicit-cut fork", () => {
+  const fa = "a".repeat(64);
+  const fb = "b".repeat(64);
+  const fc = "c".repeat(64);
+  const fd = "d".repeat(64);
+  const fe = "e".repeat(64);
+
+  async function seed(root: string, sessionID: string, directory: string, overrides: Record<string, unknown> = {}) {
+    const registry = new SessionRegistry({ stateDirectory: root });
+    await registry.put({
+      openCodeSessionId: sessionID,
+      museSessionId: "ses_muse_parent",
+      hostId: "host_seed",
+      workspaceFingerprint: workspaceFingerprint(directory),
+      providerId: "meta",
+      modelId: "wonder",
+      transcriptFingerprints: [],
+      compactionFingerprints: [],
+      pendingCommands: {},
+      ...overrides,
+    } as never);
+  }
+
+  async function storedFor(root: string, sessionID: string, directory: string) {
+    return new SessionRegistry({ stateDirectory: root }).get(sessionID, workspaceFingerprint(directory));
+  }
+
+  test("sessionManager.recordsAnchorsForCleanTurnsOnly", async () => {
+    const root = tempRoot();
+    const { manager } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const binding = await manager.resolveSession(context("ses_oc_1", directory));
+    await binding.recordTurnAccepted?.("018f4f17-9c2a-7c1a-a0fd-67a19db5d100", "turn-1");
+    await binding.recordTurnCompleted?.("turn-1", "completed");
+    await binding.commitTranscriptFingerprints?.([fa, fb]);
+    await binding.recordTurnAccepted?.("018f4f17-9c2a-7c1a-a0fd-67a19db5d101", "turn-2");
+    await binding.recordTurnCompleted?.("turn-2", "cancelled");
+    await binding.recordTurnAccepted?.("018f4f17-9c2a-7c1a-a0fd-67a19db5d102", "turn-3");
+    await binding.recordTurnCompleted?.("turn-3", "completed");
+    await binding.commitTranscriptFingerprints?.([fa, fb, fc, fd]);
+
+    expect((await storedFor(root, "ses_oc_1", directory))?.turnAnchors).toEqual([
+      { sequenceLength: 2, turnId: "turn-1" },
+      { sequenceLength: 4, turnId: "turn-3" },
+    ]);
+    await manager.close();
+  });
+
+  test("sessionManager.resetsAnchorsWhenCommitReplacesHistory", async () => {
+    const root = tempRoot();
+    const { manager } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const binding = await manager.resolveSession(context("ses_oc_1", directory));
+    await binding.recordTurnAccepted?.("018f4f17-9c2a-7c1a-a0fd-67a19db5d100", "turn-1");
+    await binding.recordTurnCompleted?.("turn-1", "completed");
+    await binding.commitTranscriptFingerprints?.([fa, fb]);
+    await binding.recordTurnAccepted?.("018f4f17-9c2a-7c1a-a0fd-67a19db5d101", "turn-9");
+    await binding.recordTurnCompleted?.("turn-9", "completed");
+    await binding.commitTranscriptFingerprints?.([fe]);
+
+    expect((await storedFor(root, "ses_oc_1", directory))?.turnAnchors).toEqual([
+      { sequenceLength: 1, turnId: "turn-9" },
+    ]);
+    await manager.close();
+  });
+
+  test("sessionManager.forksAtRetainedCutAndRepoints", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    await seed(root, "ses_oc_1", directory, {
+      transcriptFingerprints: [fa, fb, fc, fd],
+      turnAnchors: [
+        { sequenceLength: 2, turnId: "turn-1" },
+        { sequenceLength: 4, turnId: "turn-2" },
+      ],
+    });
+    const { manager, calls } = managerAt(root);
+    const binding = await manager.resolveSession(context("ses_oc_1", directory));
+
+    const result = await manager.forkSessionAtBoundary("ses_oc_1", 2);
+
+    expect(result).toEqual({ forked: true });
+    const fork = calls.find((call) => call.method === "session/fork");
+    expect(fork?.params).toMatchObject({ sessionId: "ses_muse_parent", cutPoint: { lastTurnId: "turn-1" } });
+    expect(typeof fork?.params.commandId).toBe("string");
+    const stored = await storedFor(root, "ses_oc_1", directory);
+    expect(stored?.museSessionId).toMatch(/^ses_muse_fork_/);
+    // Pre-fork turn ids do not survive a fork (offline probe check 4b), so
+    // the re-pointed entry carries no anchors; post-fork turns re-anchor.
+    expect(stored?.turnAnchors).toEqual([]);
+    expect(stored?.transcriptFingerprints).toEqual([fa, fb]);
+    expect(binding.sessionId).toBe(stored?.museSessionId);
+    await manager.close();
+  });
+
+  test("sessionManager.rejectsUnmappableBoundaryWithoutFork", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    await seed(root, "ses_oc_1", directory, {
+      transcriptFingerprints: [fa, fb, fc, fd],
+      turnAnchors: [
+        { sequenceLength: 2, turnId: "turn-1" },
+        { sequenceLength: 4, turnId: "turn-2" },
+      ],
+    });
+    const { manager, calls } = managerAt(root);
+    await manager.resolveSession(context("ses_oc_1", directory));
+
+    const result = await manager.forkSessionAtBoundary("ses_oc_1", 3);
+
+    expect(result).toEqual({ forked: false });
+    expect(calls.filter((call) => call.method === "session/fork")).toHaveLength(0);
+    await manager.close();
+  });
+
+  test("sessionManager.adoptsKnownTranscriptForNewSession", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    await seed(root, "ses_oc_parent", directory, {
+      transcriptFingerprints: [fa, fb, fc, fd],
+      turnAnchors: [
+        { sequenceLength: 2, turnId: "turn-1" },
+        { sequenceLength: 4, turnId: "turn-2" },
+      ],
+    });
+    const { manager, calls } = managerAt(root);
+
+    const binding = await manager.resolveSession(context("ses_oc_child", directory), { incomingFingerprints: [fa, fb, fc, fd] });
+
+    expect(calls.filter((call) => call.method === "session/start")).toHaveLength(0);
+    const fork = calls.find((call) => call.method === "session/fork");
+    expect(fork?.params).toMatchObject({ sessionId: "ses_muse_parent" });
+    expect("cutPoint" in (fork?.params ?? {})).toBe(false);
+    expect(binding.sessionId).toMatch(/^ses_muse_fork_/);
+    expect((await storedFor(root, "ses_oc_child", directory))?.turnAnchors).toEqual([]);
+    await manager.close();
+  });
+
+  test("sessionManager.ambiguousTranscriptStaysFresh", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    await seed(root, "ses_oc_p1", directory, { transcriptFingerprints: [fa, fb] });
+    await seed(root, "ses_oc_p2", directory, { transcriptFingerprints: [fa, fb] });
+    const { manager, calls } = managerAt(root);
+
+    await manager.resolveSession(context("ses_oc_child", directory), { incomingFingerprints: [fa, fb] });
+
+    expect(calls.filter((call) => call.method === "session/start")).toHaveLength(1);
+    expect(calls.filter((call) => call.method === "session/fork")).toHaveLength(0);
     await manager.close();
   });
 });

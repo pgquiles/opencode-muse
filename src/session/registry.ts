@@ -7,6 +7,7 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readlinkSync,
   readFileSync,
   realpathSync,
@@ -37,6 +38,11 @@ export interface PendingCommandRecord {
   fingerprint: string;
 }
 
+export interface TurnAnchor {
+  sequenceLength: number;
+  turnId: string;
+}
+
 export interface SessionRegistryEntry {
   openCodeSessionId: string;
   museSessionId: string;
@@ -50,6 +56,7 @@ export interface SessionRegistryEntry {
   transcriptFingerprints: string[];
   compactionFingerprints: string[];
   pendingCommands: Record<string, PendingCommandRecord>;
+  turnAnchors: TurnAnchor[];
   updatedAt: number;
 }
 
@@ -163,11 +170,25 @@ function validHashList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string" && HASH_PATTERN.test(item));
 }
 
+function validTurnAnchors(value: unknown): value is TurnAnchor[] {
+  if (!Array.isArray(value)) return false;
+  return value.every((item) => {
+    if (!isRecord(item)) return false;
+    const sequenceLength: unknown = item.sequenceLength;
+    const turnId: unknown = item.turnId;
+    return Number.isSafeInteger(sequenceLength)
+      && (sequenceLength as number) >= 0
+      && typeof turnId === "string"
+      && turnId.length >= 1
+      && turnId.length <= 512;
+  });
+}
+
 function normalizeEntry(input: unknown, now: () => number): SessionRegistryEntry {
   if (!isRecord(input)) throw new RegistryValidationError();
   assertOnlyKeys(input, [
     "openCodeSessionId", "museSessionId", "hostId", "workspaceFingerprint", "providerId", "modelId", "profileId",
-    "viewCursor", "activeTurnId", "transcriptFingerprints", "compactionFingerprints", "pendingCommands", "updatedAt",
+    "viewCursor", "activeTurnId", "transcriptFingerprints", "compactionFingerprints", "pendingCommands", "turnAnchors", "updatedAt",
   ]);
   if (
     typeof input.openCodeSessionId !== "string"
@@ -181,6 +202,7 @@ function normalizeEntry(input: unknown, now: () => number): SessionRegistryEntry
     || !validHashList(input.transcriptFingerprints)
     || !validHashList(input.compactionFingerprints)
     || !isRecord(input.pendingCommands)
+    || (input.turnAnchors !== undefined && !validTurnAnchors(input.turnAnchors))
   ) throw new RegistryValidationError();
 
   for (const optional of ["providerId", "modelId", "profileId", "viewCursor", "activeTurnId"] as const) {
@@ -214,6 +236,9 @@ function normalizeEntry(input: unknown, now: () => number): SessionRegistryEntry
     transcriptFingerprints: [...input.transcriptFingerprints],
     compactionFingerprints: [...input.compactionFingerprints],
     pendingCommands,
+    turnAnchors: input.turnAnchors !== undefined
+      ? (input.turnAnchors as TurnAnchor[]).map((anchor) => ({ sequenceLength: anchor.sequenceLength, turnId: anchor.turnId }))
+      : [],
     updatedAt: (input.updatedAt as number | undefined) ?? now(),
   };
 }
@@ -298,6 +323,56 @@ export class SessionRegistry {
     });
   }
 
+  /**
+   * Every valid registry entry, without touching unrelated files: corrupt
+   * entries are skipped, never quarantined, so a scan cannot move another
+   * session's state aside. Used only for OpenCode-fork adoption matching.
+   */
+  async list(): Promise<SessionRegistryEntry[]> {
+    let names: string[];
+    try {
+      names = readdirSync(this.directory);
+    } catch {
+      return [];
+    }
+    const entries: SessionRegistryEntry[] = [];
+    for (const name of names) {
+      if (!/^[a-f0-9]{64}\.json$/.test(name)) continue;
+      const path = join(this.directory, name);
+      let contents: string;
+      try {
+        const stat = statSync(path);
+        if (!stat.isFile() || stat.size > MAX_ENTRY_BYTES) continue;
+        contents = readFileSync(path, "utf8");
+      } catch {
+        continue;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(contents) as unknown;
+      } catch {
+        continue;
+      }
+      const entry = this.parseEntry(parsed);
+      if (entry) entries.push(entry);
+    }
+    return entries;
+  }
+
+  private parseEntry(parsed: unknown): SessionRegistryEntry | undefined {
+    try {
+      if (!isRecord(parsed)) return undefined;
+      assertOnlyKeys(parsed, ["version", "entry"]);
+      if (parsed.version !== REGISTRY_VERSION) return undefined;
+      if (!isRecord(parsed.entry) || typeof parsed.entry.updatedAt !== "number" || !Number.isFinite(parsed.entry.updatedAt)) {
+        return undefined;
+      }
+      return normalizeEntry(parsed.entry, this.now);
+    } catch {
+      return undefined;
+    }
+  }
+
   private async readEntry(openCodeSessionId: string): Promise<SessionRegistryEntry | undefined> {
     const path = this.entryPath(openCodeSessionId);
     if (!existsSync(path)) return undefined;
@@ -324,19 +399,11 @@ export class SessionRegistry {
       return this.quarantine(path);
     }
 
-    try {
-      if (!isRecord(parsed)) throw new RegistryValidationError();
-      assertOnlyKeys(parsed, ["version", "entry"]);
-      if (parsed.version !== REGISTRY_VERSION) throw new RegistryValidationError();
-      if (!isRecord(parsed.entry) || typeof parsed.entry.updatedAt !== "number" || !Number.isFinite(parsed.entry.updatedAt)) {
-        throw new RegistryValidationError();
-      }
-      const entry = normalizeEntry(parsed.entry, this.now);
-      if (entry.openCodeSessionId !== openCodeSessionId) throw new RegistryValidationError();
-      return entry;
-    } catch (error) {
+    const entry = this.parseEntry(parsed);
+    if (!entry || entry.openCodeSessionId !== openCodeSessionId) {
       return this.quarantine(path);
     }
+    return entry;
   }
 
   async put(input: SessionRegistryEntryInput): Promise<SessionRegistryEntry> {

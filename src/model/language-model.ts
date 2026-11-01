@@ -13,11 +13,13 @@ import { promptContainsCompactionFingerprint } from "../session/fingerprint.js";
 import {
   extractApprovalResponses,
   extractTurnInput,
+  fingerprintVisibleTranscript,
   latestUserText,
   validateModelOptions,
   type ApprovalResponse,
   type ContextFragment,
   type ExtractedTurnPart,
+  type ExtractTurnInputResult,
 } from "./prompt.js";
 import { MuseStreamMapper, resultUsage } from "./stream.js";
 import type { MuseModelSelection, RequestContext } from "../types.js";
@@ -87,7 +89,14 @@ export interface MuseTurnSession {
 
 export interface MuseLanguageRuntime {
   selectionIndex: ReadonlyMap<string, MuseModelSelection>;
-  resolveSession(context: RequestContext, options?: { verdictConsumed?: boolean }): Promise<MuseTurnSession>;
+  resolveSession(context: RequestContext, options?: { verdictConsumed?: boolean; incomingFingerprints?: readonly string[] }): Promise<MuseTurnSession>;
+  /**
+   * Fork the mapped Muse session at a retained transcript boundary (#20).
+   * Reports `{ forked: false }` — and sends nothing — when the cut is not a
+   * unique clean-turn anchor. Absent preserves the fail-closed divergence
+   * error without attempting a fork.
+   */
+  forkSessionAtBoundary?(sessionID: string, retainedLength: number): Promise<{ forked: true } | { forked: false }>;
   videoChunkBytes?: number;
   settleApprovalResponses?(sessionID: string, responses: ApprovalResponse[]): Promise<string[]>;
   /**
@@ -149,6 +158,13 @@ function describeApprovals(runtime: MuseLanguageRuntime, sessionID: string) {
 function describeUserInputQuestion(runtime: MuseLanguageRuntime, sessionID: string) {
   return (_userInputId: string) =>
     runtime.describeCurrentUserInputQuestion?.(sessionID);
+}
+
+/** Length of the shared leading run: the retained transcript prefix after a rewind. */
+function commonPrefixLength(previous: readonly string[], current: readonly string[]): number {
+  let length = 0;
+  while (length < previous.length && length < current.length && previous[length] === current[length]) length += 1;
+  return length;
 }
 
 /** A verdict turn that needs no Muse turn: re-asks and queued prompts. */
@@ -694,7 +710,11 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
       ? await runtime.consumeConversationalVerdict?.(context.sessionID, peekText)
         ?? await runtime.consumeConversationalAnswer?.(context.sessionID, peekText)
       : null;
-    const session = await runtime.resolveSession(context, peekOutcome ? { verdictConsumed: true } : undefined);
+    const currentFingerprints = fingerprintVisibleTranscript(options.prompt);
+    const session = await runtime.resolveSession(context, {
+      ...(peekOutcome ? { verdictConsumed: true } : {}),
+      incomingFingerprints: currentFingerprints,
+    });
     // Set by the manager when the settled verdicts matched a parked turn.
     const joining = session.joinParkedTurnId !== undefined;
     // The effort tier arrives as the resolved request variant (Ctrl+T,
@@ -709,7 +729,7 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     const observedCompaction = (session.compactionFingerprints ?? []).some((candidate) =>
       promptContainsCompactionFingerprint(options.prompt, candidate),
     );
-    const extracted = await extractTurnInput(
+    const runExtraction = () => extractTurnInput(
       options.prompt,
       observedCompaction ? [] : session.previousTranscriptFingerprints,
       session.contextAllowlist,
@@ -722,9 +742,24 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
           : undefined,
       },
     );
-    if (extracted.ok) {
+    const noteFirstTurn = (result: ExtractTurnInputResult) => {
+      if (!result.ok) return;
       const notices = pendingFirstTurnNotices(session.sessionNotices, session.previousTranscriptFingerprints, observedCompaction);
-      if (notices.length > 0) extracted.parts.unshift({ type: "text", text: notices.join("\n") });
+      if (notices.length > 0) result.parts.unshift({ type: "text", text: notices.join("\n") });
+    };
+    let extracted = await runExtraction();
+    noteFirstTurn(extracted);
+    if (!extracted.ok && !joining && extracted.error.code === "transcript-diverged" && session.activeTurnId === undefined) {
+      // Rewind: the retained prefix maps to a completed Muse turn, so fork
+      // there and continue on the fork. Anything unmappable — or a fork the
+      // manager refuses — falls through to the fail-closed divergence error:
+      // no uncut turn on the original session, no prompt replay.
+      const retained = commonPrefixLength(session.previousTranscriptFingerprints, currentFingerprints);
+      const fork = await runtime.forkSessionAtBoundary?.(context.sessionID, retained) ?? { forked: false };
+      if (fork.forked) {
+        extracted = await runExtraction();
+        noteFirstTurn(extracted);
+      }
     }
     if (!extracted.ok) {
       if (joining && extracted.error.code === "no-new-user-input") {

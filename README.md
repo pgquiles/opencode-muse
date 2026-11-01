@@ -182,10 +182,12 @@ the billed lane with `muse usage`. See
 - **Tools and agent instructions:** Muse runs its own agent and tools; OpenCode
   tools are not executed for a Muse turn. Recognized custom-agent instructions
   may be forwarded, but Muse otherwise follows its own workspace rules.
-- **Rewind and session names:** Rewind/fork is unavailable on the currently
-  tested Linux Muse runtime, and custom session names may not work. Start a new
-  session after rewinding or editing the OpenCode conversation. Rewinding does
-  not undo files Muse changed. See
+- **Rewind and session names:** On the pinned Muse 1.4.14 runtime, rewinding
+  the OpenCode conversation forks the mapped Muse session at the retained
+  turn boundary; custom session names may not work. Rewinding into history
+  the bridge cannot map to a completed Muse turn still requires a fresh
+  session, and rewinding never undoes files Muse changed — the pre-rewind
+  Muse session also stays in your Muse home, since MSP has no delete. See
   [#20](https://github.com/pgquiles/opencode-muse/issues/20).
 - **Recovery after missed events:** Basic session resume and cursor replay have
   been tested, but recovery from a real Muse event gap has only been tested
