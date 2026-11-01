@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { museChildEnv } from "./contributor.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -91,7 +92,7 @@ function defaultSpawn(museBin: string, clipPath: string, timeoutMs: number): Pro
     // The deadline is enforced by the timer below (not the spawn `timeout`
     // option) so a kill is always recorded as a timeout, never as a bare
     // null exit.
-    const child = spawn(museBin, ["voice", "transcribe", clipPath]);
+    const child = spawn(museBin, ["voice", "transcribe", clipPath], { env: museChildEnv(process.env) });
     let stdout = "";
     let stderr = "";
     let timedOut = false;

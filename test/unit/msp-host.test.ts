@@ -60,6 +60,52 @@ describe("MspHost", () => {
     expect(fake.closeCount).toBe(1);
   });
 
+  test("mspHost.sanitizesExplicitServeChildEnvBeforeHandshake", async () => {
+    const transport = new FakeMspTransport((request) => request.method === "initialize"
+      ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }
+      : {});
+    const fake = fakeHandshake(transport);
+    let seenEnv: Record<string, string | undefined> | undefined;
+    const host = await MspHost.start(
+      { env: { KEEP: "1", META_API_KEY: "secret", MUSE_CONTRIBUTOR_MODE: "off" } },
+      {
+        createHandshake: (spawnOptions) => {
+          seenEnv = { ...(spawnOptions.env ?? {}) };
+          return fake.handshake;
+        },
+      },
+    );
+    expect(seenEnv?.KEEP).toBe("1");
+    expect(seenEnv?.META_API_KEY).toBeUndefined();
+    expect(seenEnv?.MUSE_CONTRIBUTOR_MODE).toBeUndefined();
+    expect(seenEnv?.MUSE_NO_AUTO_UPDATE).toBe("1");
+    await host.close();
+  });
+
+  test("mspHost.sanitizesDefaultServeChildEnvBeforeHandshake", async () => {
+    const transport = new FakeMspTransport((request) => request.method === "initialize"
+      ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }
+      : {});
+    const fake = fakeHandshake(transport);
+    const previous = process.env.META_API_KEY;
+    process.env.META_API_KEY = "secret";
+    try {
+      let seenEnv: Record<string, string | undefined> | undefined;
+      const host = await MspHost.start({}, {
+        createHandshake: (spawnOptions) => {
+          seenEnv = { ...(spawnOptions.env ?? {}) };
+          return fake.handshake;
+        },
+      });
+      expect(seenEnv?.META_API_KEY).toBeUndefined();
+      expect(seenEnv?.MUSE_NO_AUTO_UPDATE).toBe("1");
+      await host.close();
+    } finally {
+      if (previous === undefined) delete process.env.META_API_KEY;
+      else process.env.META_API_KEY = previous;
+    }
+  });
+
   test("mspHost.mintsCommandIdsFromItsOwnSdkConnection", async () => {
     const transport = new FakeMspTransport((request) => request.method === "initialize"
       ? { schema: { fingerprint: EXPECTED_SCHEMA_FINGERPRINT } }

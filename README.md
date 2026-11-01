@@ -62,7 +62,13 @@ OpenChamber's current provider UI does not expose OpenCode plugin `command`
 authentication methods, so this plugin does not promise a sign-in button. It
 uses the Muse CLI's existing account/configuration through `muse serve`; it
 never reads Muse credential files, exports tokens, or changes subscription
-mode. If the CLI has no usable model catalog, the provider remains a disabled
+mode. Every Muse child process the plugin spawns (serve hosts, audio
+transcription, CLI probes) gets a sanitized environment: `META_API_KEY` and
+`MUSE_CONTRIBUTOR_MODE` are stripped — Muse prefers the key over the account
+login, which would silently bill pay-as-you-go instead of the subscription —
+and `MUSE_NO_AUTO_UPDATE=1` is set so Muse never replaces its binary under a
+running host. Everything else passes through untouched. If the CLI has no
+usable model catalog, the provider remains a disabled
 setup placeholder rather than advertising a model that will fail on use.
 
 ## Configuration

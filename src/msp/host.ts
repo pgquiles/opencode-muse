@@ -18,6 +18,7 @@ import {
   MspTransportError,
 } from "../errors.js";
 import { MspClient, type MspConnectionLike, type MspNotification, type MspServerRequest } from "./client.js";
+import { museChildEnv } from "./contributor.js";
 import { ApprovalExchange, conversationalChoices, selectApprovalChoiceId, type ApprovalVerdict } from "./approvals.js";
 import { UserInputExchange, validUserInputAnswers, type UserInputAnswer, type UserInputVerdict } from "./user-input.js";
 
@@ -182,7 +183,7 @@ export class MspHost {
       command: options.museBin ?? "muse",
       args: options.args,
       cwd: options.cwd,
-      env: options.env,
+      env: museChildEnv(options.env ?? process.env),
       // No stderr callback: the SDK's bounded diagnostic tail is never forwarded to plugin logs.
       shutdownTimeoutMs: options.shutdownTimeoutMs ?? 30_000,
     };

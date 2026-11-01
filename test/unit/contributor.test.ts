@@ -3,6 +3,7 @@ import {
   assertContributorFlagSupported,
   baseServeArgs,
   contributorServeArgs,
+  museChildEnv,
   paygBillingNotice,
   resolveContributorMode,
 } from "../../src/msp/contributor.js";
@@ -68,6 +69,29 @@ describe("Contributor billing lane", () => {
     expect(error).toBeInstanceOf(MuseInvalidConfigError);
     // Raw spawn stderr must never leak into the message.
     expect((error as Error).message).not.toContain("ENOENT");
+  });
+
+  test("contributor.childEnvStripsBillingKeysAndPinsNoAutoUpdate", () => {
+    const source = {
+      PATH: "/bin",
+      META_API_KEY: "secret",
+      MUSE_CONTRIBUTOR_MODE: "off",
+      Meta_Api_Key: "odd-case",
+      MUSE_NO_AUTO_UPDATE: "0",
+    };
+    const cleaned = museChildEnv(source);
+    expect(cleaned.META_API_KEY).toBeUndefined();
+    expect(cleaned.MUSE_CONTRIBUTOR_MODE).toBeUndefined();
+    expect("Meta_Api_Key" in cleaned).toBe(false);
+    expect(cleaned.PATH).toBe("/bin");
+    expect(cleaned.MUSE_NO_AUTO_UPDATE).toBe("1");
+    expect(source.META_API_KEY).toBe("secret");
+  });
+
+  test("contributor.childEnvDropsUndefinedValuesAndKeepsTheRest", () => {
+    const cleaned = museChildEnv({ KEEP: "1", GONE: undefined });
+    expect(cleaned.KEEP).toBe("1");
+    expect("GONE" in cleaned).toBe(false);
   });
 
   test("contributor.paygNoticePointsAtTheOfficialPathWithoutReadingTheKey", () => {

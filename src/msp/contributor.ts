@@ -41,6 +41,39 @@ export function contributorServeArgs(mode: ContributorMode): [string, Contributo
 }
 
 /**
+ * Env keys that must never reach a Muse child process. Muse prefers
+ * `META_API_KEY` over the account login, which would silently move requests
+ * to pay-as-you-go billing; a `MUSE_CONTRIBUTOR_MODE` value would fight the
+ * plugin's per-process `--contributor-mode` lane.
+ */
+const STRIPPED_CHILD_ENV_KEYS = new Set(["META_API_KEY", "MUSE_CONTRIBUTOR_MODE"]);
+
+/**
+ * Child env for every Muse process the plugin spawns (serve hosts,
+ * transcription, help probes). Deletes the billing-lane keys (matched
+ * case-insensitively for Windows-style casing) and pins
+ * `MUSE_NO_AUTO_UPDATE=1` so Muse never replaces its own binary under a
+ * running host. Everything else (PATH, HOME, keychain/proxy plumbing)
+ * passes through untouched: this deletes keys rather than allowlisting, so
+ * login keeps working.
+ *
+ * Precedence note: if muse ever honors `MUSE_CONTRIBUTOR_MODE`, the
+ * always-passed `--contributor-mode` flag wins by standard flag-over-env
+ * precedence, which would block per-session lanes. That future must pass the
+ * flag only for explicitly configured lanes and otherwise inherit per host.
+ */
+export function museChildEnv(source: Record<string, string | undefined> = process.env): Record<string, string> {
+  const cleaned: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value === undefined) continue;
+    if (STRIPPED_CHILD_ENV_KEYS.has(key.toUpperCase())) continue;
+    cleaned[key] = value;
+  }
+  cleaned.MUSE_NO_AUTO_UPDATE = "1";
+  return cleaned;
+}
+
+/**
  * Base `muse serve` argv for every host the plugin starts, so the session
  * host (which bills turns) and the short-lived catalog host (model/list is
  * unbilled) never diverge on the requested lane.
@@ -56,7 +89,7 @@ export interface ServeHelpResult {
 export type ServeHelpRunner = (museBin: string) => ServeHelpResult | Promise<ServeHelpResult>;
 
 function defaultServeHelpRunner(museBin: string): ServeHelpResult {
-  const result = spawnSync(museBin, ["serve", "--help"], { encoding: "utf8", timeout: 15_000 });
+  const result = spawnSync(museBin, ["serve", "--help"], { encoding: "utf8", timeout: 15_000, env: museChildEnv(process.env) });
   return { stdout: typeof result.stdout === "string" ? result.stdout : "" };
 }
 
