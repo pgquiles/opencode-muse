@@ -137,6 +137,10 @@ async function probeSessionRename(connection: Connection, sessionId: string, nam
     if (failure.code === -32603 && failure.message?.includes("session naming is unavailable")) {
       return "runtime-unavailable";
     }
+    // Muse CLI 1.4.14 reports unavailable rename as -32030 commandRejected.
+    if (failure.code === -32030) {
+      return "runtime-unavailable";
+    }
     throw error;
   }
 }

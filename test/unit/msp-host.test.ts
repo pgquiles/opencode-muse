@@ -36,9 +36,9 @@ function fakeHandshake(
 }
 
 describe("MspHost", () => {
-  test("mspHost.pinsMuse1412StableSchemaFingerprint", () => {
+  test("mspHost.pinsMuse1414StableSchemaFingerprint", () => {
     expect(EXPECTED_SCHEMA_FINGERPRINT).toBe(
-      "sha256:cfdb6d2525601b9bac76584ccb0610ab3a5539b5e4f51141f079b99b39fcb4e0",
+      "sha256:c94c3d1f2f51e6424074b9ec43eac3eedcf532d3dcd77351ec1383a87d3049c6",
     );
   });
 

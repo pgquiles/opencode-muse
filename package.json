@@ -1,6 +1,6 @@
 {
   "name": "opencode-muse",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "OpenCode plugin backed by the official Muse Code CLI and MSP",
   "license": "MIT",
   "type": "module",
@@ -48,7 +48,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@muse-code/sdk": "1.4.12"
+    "@muse-code/sdk": "1.4.14"
   },
   "devDependencies": {
     "@ai-sdk/provider": "3.0.8",

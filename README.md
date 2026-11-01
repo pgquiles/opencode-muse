@@ -16,7 +16,7 @@ Add the published package to your project-level `opencode.jsonc` (or
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["opencode-muse@0.7.1"],
+  "plugins": ["opencode-muse@0.8.0"],
 }
 ```
 
@@ -45,9 +45,9 @@ ID: opencode-muse` and mark it failed (observed on 2.2.5).
 
 The locally packed package passed provider discovery and a text-turn smoke
 test. Muse models and a text turn were also confirmed in OpenChamber after
-restarting it. Verified Muse CLI versions are 1.4.12 and 1.4.13 (the SDK
-stays 1.4.12; a newer CLI fingerprint starts with a recorded warning
-instead of failing). See
+restarting it. Verified Muse CLI versions are 1.4.12 through 1.4.14;
+the 1.4.14 SDK pin matches the 1.4.14 CLI fingerprint exactly, so no
+startup warning is recorded. See
 [#21](https://github.com/pgquiles/opencode-muse/issues/21).
 
 ## Authentication
