@@ -38,7 +38,6 @@ import {
 } from "../msp/worktree.js";
 import {
   MspCommandRejectedError,
-  MuseApprovalPendingError,
   MuseRecoveryChoiceRequiredError,
   MuseUnsupportedRequestError,
   RegistryWorkspaceMismatchError,
@@ -178,11 +177,28 @@ export class MuseSessionManager {
       // handoff flag tells it to detach without releasing.
       return existingBinding;
     }
-    if (existingBinding && existingBinding.host.approvals.pendingApprovalIds().length > 0) {
-      throw new MuseApprovalPendingError();
+    // A live turn absorbs the follow-up via turn/steer — including while an
+    // approval is parked, since the verdict flow still owns approval
+    // decisions. Assigned (not conditionally set) so a completed turn clears
+    // a stale marker; the bridge steers at most once, then turns fresh.
+    // Re-entry also hands the output stream over like a verdict join (epoch
+    // bump plus lease handoff): both calls drain the same turn, the first
+    // finisher detaches, the second releases.
+    if (existingBinding) {
+      existingBinding.steerExpectedTurnId = existingBinding.activeTurnId;
+      if (existingBinding.activeTurnId !== undefined) {
+        existingBinding.streamEpoch = (existingBinding.streamEpoch ?? 0) + 1;
+        existingBinding.handoffLeaseToJoiner = true;
+      }
     }
 
-    const lease = await this.options.workspaceLock.acquire(fingerprint, context.sessionID);
+    // Same-session re-entry reuses the live binding's lease: a follow-up
+    // while a turn runs must not fail the workspace busy guard. A fresh
+    // acquire (and its release on failure below) happens only when no live
+    // lease exists.
+    const liveLease = existingBinding?.lease;
+    const lease = liveLease ?? await this.options.workspaceLock.acquire(fingerprint, context.sessionID);
+    const freshLease = liveLease === undefined;
     let host: MuseSessionHost | undefined;
     try {
       const stored = await this.options.registry.get(context.sessionID, fingerprint);
@@ -206,8 +222,10 @@ export class MuseSessionManager {
           await this.applySelectionIfChanged(existingBinding, selected);
           await this.persistBinding(context.sessionID, existingBinding);
         } catch (error) {
-          existingBinding.lease = undefined;
-          await lease.release();
+          if (freshLease) {
+            existingBinding.lease = undefined;
+            await lease.release();
+          }
           throw error;
         }
         return existingBinding;

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { SessionRegistry } from "../../src/session/registry.js";
 import { WorkspaceLock } from "../../src/session/workspace-lock.js";
 import { MuseSessionManager } from "../../src/session/manager.js";
-import { MspCommandTimeoutError, MuseApprovalPendingError, WorkspaceBusyError, MuseRecoveryChoiceRequiredError } from "../../src/errors.js";
+import { MspCommandTimeoutError, WorkspaceBusyError, MuseRecoveryChoiceRequiredError } from "../../src/errors.js";
 import { ApprovalExchange } from "../../src/msp/approvals.js";
 import { UserInputExchange } from "../../src/msp/user-input.js";
 import type { ContributorMode } from "../../src/msp/contributor.js";
@@ -463,7 +463,24 @@ describe("MuseSessionManager", () => {
     await manager.close();
   });
 
-  test("sessionManager.rejectsNewTurnsWhileAnApprovalIsParked", async () => {
+  test("sessionManager.marksFollowUpResolveForSteeringIntoTheLiveTurn", async () => {
+    const root = tempRoot();
+    const { manager, calls } = managerAt(root);
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const first = await manager.resolveSession(context("ses_oc_1", directory));
+    await first.recordTurnAccepted?.("cmd-1", "turn-1");
+
+    const second = await manager.resolveSession(context("ses_oc_1", directory));
+    expect(second).toBe(first);
+    expect(second.steerExpectedTurnId).toBe("turn-1");
+    expect(calls.filter((call) => call.method === "session/start")).toHaveLength(1);
+    await manager.close();
+  });
+
+  test("sessionManager.steersInsteadOfRejectingWhileApprovalIsParked", async () => {
+    // #44 decision: new user text steers into the parked turn; only a
+    // resolve with no live turn to target still fails closed.
     const root = tempRoot();
     const { manager, exchanges } = managerAt(root);
     const directory = join(root, "project");
@@ -472,8 +489,8 @@ describe("MuseSessionManager", () => {
     await first.recordTurnAccepted?.("cmd-1", "turn-1");
     parkApproval(exchanges[0] as ApprovalExchange, first.sessionId, "turn-1");
 
-    await expect(manager.resolveSession(context("ses_oc_1", directory)))
-      .rejects.toBeInstanceOf(MuseApprovalPendingError);
+    const second = await manager.resolveSession(context("ses_oc_1", directory));
+    expect(second.steerExpectedTurnId).toBe("turn-1");
     await manager.close();
   });
 

@@ -64,6 +64,12 @@ export interface MuseTurnSession {
   emittedApprovalPrompts?: Set<string>;
   /** Set by the session manager when this call must attach to a parked turn. */
   joinParkedTurnId?: string;
+  /**
+   * Set by the session manager when this call must steer fresh input into
+   * the live Muse turn instead of starting a new one. A refused steer falls
+   * back to turn/start exactly once — never a second steer.
+   */
+  steerExpectedTurnId?: string;
   /** Bumped by the manager when a newer call takes over this session's output. */
   streamEpoch?: number;
   /** When true, the lease already moved to the joining call: detach, never interrupt or release. */
@@ -327,8 +333,13 @@ export async function runMuseTurn(
   const joinTurnId = session.joinParkedTurnId;
   session.joinParkedTurnId = undefined;
   const joinedTurn = joinTurnId !== undefined;
-  if (!joinedTurn) {
-    // A fresh turn starts a new ownership epoch; stale handoff markers die here.
+  const steerTarget = !joinedTurn ? session.steerExpectedTurnId : undefined;
+  session.steerExpectedTurnId = undefined;
+  const steering = steerTarget !== undefined;
+  if (!joinedTurn && !steering) {
+    // A fresh turn starts a new ownership epoch; stale handoff markers die
+    // here. Steers keep the re-entry handoff so both drainers share one
+    // lease release.
     session.handoffLeaseToJoiner = false;
   }
 
@@ -390,19 +401,45 @@ export async function runMuseTurn(
       subscriptionController = new AbortController();
       subscription = session.host.subscribe(session.sessionId, session.replayAfterCursor, subscriptionController.signal)[Symbol.asyncIterator]();
       firstNotification = subscription.next();
-      const params: Record<string, unknown> = {
-        sessionId: session.sessionId,
-        input: inputParts,
-      };
-      if (context.effort) params.reasoningEffort = context.effort;
-      const ack = await submitCommand(session, "turn/start", turnCommandId, params);
-      if (typeof ack.turnId !== "string" || typeof ack.disposition !== "string") {
-        throw new MspProtocolError("turn/start");
+      // A follow-up on a live turn steers into it instead of queueing a new
+      // one behind it. Aborting after a steer interrupts the whole turn: the
+      // protocol offers no un-steer, so the queued-turn abort granularity is
+      // intentionally not preserved here. A refused steer clears the re-entry
+      // handoff (single ownership again) and falls through to a fresh turn.
+      if (steering) {
+        try {
+          await submitCommand(session, "turn/steer", turnCommandId, {
+            sessionId: session.sessionId,
+            expectedTurnId: steerTarget,
+            input: inputParts,
+          });
+          turnId = steerTarget;
+          disposition = "steered";
+          accepted = true;
+        } catch (error) {
+          if (!(error instanceof MspCommandRejectedError)) throw error;
+          session.handoffLeaseToJoiner = false;
+        }
       }
-      turnId = ack.turnId;
-      disposition = ack.disposition;
-      accepted = true;
-      await session.recordTurnAccepted?.(turnCommandId, turnId);
+      if (!accepted) {
+        const startCommandId = session.host.mintCommandId();
+        const params: Record<string, unknown> = {
+          sessionId: session.sessionId,
+          input: inputParts,
+        };
+        if (context.effort) params.reasoningEffort = context.effort;
+        const ack = await submitCommand(session, "turn/start", startCommandId, params);
+        if (typeof ack.turnId !== "string" || typeof ack.disposition !== "string") {
+          throw new MspProtocolError("turn/start");
+        }
+        turnId = ack.turnId;
+        disposition = ack.disposition;
+        accepted = true;
+        await session.recordTurnAccepted?.(startCommandId, turnId);
+      }
+    }
+    if (turnId === undefined || disposition === undefined) {
+      throw new MspProtocolError(steering ? "turn/steer" : "turn/start");
     }
     if (abortRequested) await cancel();
 

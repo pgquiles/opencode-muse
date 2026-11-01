@@ -61,6 +61,8 @@ function fakeRuntime(options: {
   compactionFingerprints?: string[];
   contextError?: string;
   joinParkedTurnId?: string;
+  steerExpectedTurnId?: string;
+  failTurnSteer?: boolean;
   onDisarm?: () => void;
   streamEpoch?: number;
   handoffLeaseToJoiner?: boolean;
@@ -94,6 +96,10 @@ function fakeRuntime(options: {
         if (options.timeoutTurnStart) throw new MspCommandTimeoutError(method, 10);
         if (options.failTurnStart) throw new MspCommandRejectedError(method, -32030, "commandRejected", false);
         return { turnId: "turn-1", disposition: options.disposition ?? "started" };
+      }
+      if (method === "turn/steer") {
+        if (options.failTurnSteer) throw new MspCommandRejectedError(method, -32030, "commandRejected", false);
+        return { status: "accepted" };
       }
       if (method === "media/upload") return { uploadId: params.uploadId };
       return { status: "accepted" };
@@ -156,6 +162,7 @@ function fakeRuntime(options: {
     contextAllowlist: [],
     contextError: options.contextError,
     joinParkedTurnId: options.joinParkedTurnId,
+    steerExpectedTurnId: options.steerExpectedTurnId,
     streamEpoch: options.streamEpoch,
     handoffLeaseToJoiner: options.handoffLeaseToJoiner,
     emittedApprovalPrompts: options.emittedApprovalPrompts,
@@ -277,6 +284,51 @@ describe("Muse LanguageModelV3 bridge", () => {
     expect(fake.commands.filter((command) => command.method === "turn/start")).toHaveLength(1);
     await fake.releasedPromise;
     expect(fake.released).toBe(1);
+  });
+
+  test("languageModel.steersFollowUpTextIntoTheRunningTurn", async () => {
+    const fake = fakeRuntime({ events: textEvents("turn-9"), steerExpectedTurnId: "turn-9" });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const reader = result.stream.getReader();
+    const parts: Array<Record<string, unknown>> = [];
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      parts.push(next.value as unknown as Record<string, unknown>);
+    }
+
+    expect(parts.map((part) => part.type)).toEqual([
+      "stream-start", "text-start", "text-delta", "text-delta", "text-end", "finish",
+    ]);
+    const steers = fake.commands.filter((command) => command.method === "turn/steer");
+    expect(steers).toHaveLength(1);
+    expect(steers[0]?.params).toMatchObject({
+      sessionId: "ses_model_test",
+      expectedTurnId: "turn-9",
+      input: [{ type: "text", text: "Return the probe answer." }],
+    });
+    expect(fake.commands.some((command) => command.method === "turn/start")).toBe(false);
+  });
+
+  test("languageModel.fallsBackToFreshTurnWhenSteerIsRefused", async () => {
+    const fake = fakeRuntime({ events: textEvents(), steerExpectedTurnId: "turn-9", failTurnSteer: true });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const reader = result.stream.getReader();
+    const parts: Array<Record<string, unknown>> = [];
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      parts.push(next.value as unknown as Record<string, unknown>);
+    }
+
+    expect(parts.map((part) => part.type)).toEqual([
+      "stream-start", "text-start", "text-delta", "text-delta", "text-end", "finish",
+    ]);
+    expect(fake.commands.filter((command) => command.method === "turn/steer")).toHaveLength(1);
+    expect(fake.commands.filter((command) => command.method === "turn/start")).toHaveLength(1);
+    expect(fake.order.indexOf("turn/steer")).toBeLessThan(fake.order.indexOf("turn/start"));
   });
 
   test("languageModel.preflightContextAndUnsupportedOptionsFailBeforeSessionResolution", async () => {
