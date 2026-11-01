@@ -386,4 +386,33 @@ describe("Muse → LanguageModelV3 stream mapping", () => {
       toolCallId: "call-1",
     }))).toHaveLength(4);
   });
+
+  test("stream.emitsNativeToolCallAndFinishForParkedLoopbackCall", () => {
+    const mapper = new MuseStreamMapper("turn-live");
+    const parts = mapper.accept(event("bridge/tool-parked", {
+      sessionId: "ses-1",
+      turnId: "turn-live",
+      mcpCallId: "mc_1",
+      toolName: "opencode_write",
+      args: { path: "a.txt" },
+    }));
+
+    expect(parts.map((part) => part.type)).toEqual(["tool-call", "finish"]);
+    expect(parts[0]).toMatchObject({
+      type: "tool-call",
+      toolCallId: "mc_1",
+      toolName: "opencode_write",
+      input: JSON.stringify({ path: "a.txt" }),
+    });
+    expect(parts[1]).toMatchObject({ type: "finish", finishReason: { unified: "stop" } });
+  });
+
+  test("stream.ignoresMalformedParkedLoopbackCall", () => {
+    const mapper = new MuseStreamMapper("turn-live");
+    expect(mapper.accept(event("bridge/tool-parked", {
+      sessionId: "ses-1",
+      turnId: "turn-live",
+      mcpCallId: "mc_1",
+    }))).toEqual([]);
+  });
 });

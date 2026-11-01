@@ -148,6 +148,8 @@ export class MuseStreamMapper {
         return this.finishWasSent ? [] : [this.finishPart("other", "retracted")];
       case "turn/completed":
         return this.turnCompleted(params);
+      case "bridge/tool-parked":
+        return this.toolParkedEvent(params);
       case "approval/requested":
         return this.approvalRequestedEvent(params);
       case "userInput/requested":
@@ -184,6 +186,32 @@ export class MuseStreamMapper {
       { type: "text-delta", id: itemId, delta: prompt },
       { type: "text-end", id: itemId },
       this.finishPart("stop", "approval-parked"),
+    ];
+  }
+
+  /**
+   * A parked loopback call becomes one native OpenCode tool-call part,
+   * addressed by the loopback call id so the later tool result resolves the
+   * same parked call without a lookup table. The turn stays open server-side
+   * (parked), so the stream ends here: core executes, then re-invokes with
+   * the result on the next call, which attaches to the live turn.
+   */
+  private toolParkedEvent(params: Record<string, unknown>): MuseStreamPart[] {
+    const callId = params.mcpCallId;
+    const toolName = params.toolName;
+    const args = params.args;
+    if (typeof callId !== "string" || callId.length === 0
+      || typeof toolName !== "string" || toolName.length === 0
+      || typeof args !== "object" || args === null || Array.isArray(args)) return [];
+    let input: string;
+    try {
+      input = JSON.stringify(args);
+    } catch {
+      return [];
+    }
+    return [
+      { type: "tool-call", toolCallId: callId, toolName, input },
+      this.finishPart("stop", "tool-call-parked"),
     ];
   }
 

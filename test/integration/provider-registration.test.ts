@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createProviderPlugin } from "../../src/provider.js";
 import { createMuse } from "../../src/index.js";
 import type { MuseCatalogSnapshot } from "../../src/catalog.js";
-import { fingerprintCompactionOutput } from "../../src/session/fingerprint.js";
+import { fingerprintCompactionOutput, fingerprintTranscript } from "../../src/session/fingerprint.js";
 import type { ServeHelpRunner } from "../../src/msp/contributor.js";
 import type { SessionManagerBase } from "../../src/provider.js";
 import { MuseInvalidConfigError } from "../../src/errors.js";
@@ -351,6 +351,71 @@ describe("Muse OpenCode provider registration", () => {
 
     expect(warnings.some((warning) => warning.includes("metamate"))).toBe(true);
     expect(warnings.some((warning) => warning.includes("presence-sentinel-not-a-key"))).toBe(false);
+  });
+
+  test("provider.forwardsRewindForksToTheSessionManager", async () => {
+    const fake = fakeContext();
+    const previous = [
+      { role: "user", content: [{ type: "text", text: "first request" }] },
+      { role: "assistant", content: [{ type: "text", text: "first answer" }] },
+      { role: "user", content: [{ type: "text", text: "second request" }] },
+      { role: "assistant", content: [{ type: "text", text: "second answer" }] },
+    ];
+    const stored = fingerprintTranscript(previous);
+    const forkCalls: Array<{ sessionID: string; retainedLength: number }> = [];
+    const runtime = await createProviderPlugin(fake.context as never, "file:///plugin/dist/index.js", {
+      fetchCatalog: async () => liveCatalog(),
+      serveHelpRunner: okServeHelp,
+      createSessionManager: () => ({
+        setContextForSession() {},
+        async resolveSession() {
+          return {
+            host: {},
+            sessionId: "ses_muse_old",
+            museSessionId: "ses_muse_old",
+            previousTranscriptFingerprints: stored,
+            contextAllowlist: [],
+            sessionNotices: [],
+            compactionFingerprints: [],
+            emittedApprovalPrompts: new Set<string>(),
+            currentSelection: { providerId: "meta", profileId: "tbh", modelId: "muse-wonder-1.0" },
+          };
+        },
+        previousTranscriptFingerprints: () => stored,
+        async consumeRecoveryDecision() { return null; },
+        async forkSessionAtBoundary(sessionID: string, retainedLength: number) {
+          forkCalls.push({ sessionID, retainedLength });
+          return { forked: false };
+        },
+        async close() {},
+      } as never),
+    });
+    await runtime.refreshTask;
+    const hook = fake.aisdkHooks.find((candidate) => candidate.name === "language");
+    const input: { model: { id: string; modelID: string; providerID: string }; language?: { doGenerate(options: unknown): Promise<unknown> } } = {
+      model: { id: "muse-profile-tbh-model-muse-wonder-1.0", modelID: "muse-wonder-1.0", providerID: "muse" },
+    };
+    hook?.callback(input);
+    const prompt = [
+      { role: "user", content: [{ type: "text", text: "first request" }] },
+      { role: "assistant", content: [{ type: "text", text: "first answer" }] },
+      { role: "user", content: [{ type: "text", text: "edited follow-up" }] },
+    ];
+    const error = await input.language!.doGenerate({
+      prompt,
+      headers: {
+        "x-opencode-muse-session-id": "ses_rewind_wire",
+        "x-opencode-muse-directory": "/tmp/opencode/muse-plugin-test",
+        "x-opencode-muse-kind": "primary",
+        "x-opencode-muse-model-id": "muse-profile-tbh-model-muse-wonder-1.0",
+        "x-opencode-muse-provider-id": "muse",
+        "x-opencode-muse-variant": "high",
+      },
+    }).then(() => undefined, (reason: unknown) => reason as Error);
+
+    expect(error?.name).toBe("MuseTranscriptDivergedError");
+    expect(forkCalls).toEqual([{ sessionID: "ses_rewind_wire", retainedLength: 2 }]);
+    await runtime.dispose();
   });
 
   test("provider.setupReturnsAfterABoundedWaitWhenDiscoveryStalls", async () => {

@@ -6,12 +6,15 @@ import type {
 import { createHash } from "node:crypto";
 import { MspCommandRejectedError, MuseBridgeError, MuseRecoveryChoiceRequiredError, MuseTranscriptDivergedError, MuseUnsupportedInputError, MuseUnsupportedRequestError, MspProtocolError, MspTransportError } from "../errors.js";
 import type { MspNotification } from "../msp/client.js";
+import type { ToolBackend } from "../msp/tool-backend.js";
+import type { ParkedCall } from "../mcp/loopback.js";
 import { notificationCursorKey } from "../msp/notification.js";
 import { MUSE_CONTEXT_HEADERS, readRequestContext } from "./context.js";
 import { classifyMetaRequest, makeCompactionDigest, makeLocalTitle, type MetaRequestClass } from "./meta.js";
 import { promptContainsCompactionFingerprint } from "../session/fingerprint.js";
 import {
   extractApprovalResponses,
+  extractToolResults,
   extractTurnInput,
   fingerprintVisibleTranscript,
   latestUserText,
@@ -51,12 +54,28 @@ export interface MuseTurnSession {
   contextAllowlist: readonly ContextFragment[];
   contextError?: string;
   replayAfterCursor?: string;
+  /** Latest observed view cursor; attach subscribes from here. */
+  viewCursor?: string;
   currentSelection?: Pick<MuseModelSelection, "providerId" | "modelId" | "profileId">;
   recordPendingCommand?(input: { commandId: string; method: string; fingerprint: string }): Promise<void>;
   clearPendingCommand?(commandId: string): Promise<void>;
   recordTurnAccepted?(commandId: string, turnId: string): Promise<void>;
   /** The manager clears this when the turn reaches a terminal state. */
   activeTurnId?: string;
+  /** Tool backend that owns tool execution for this session; absent means "muse". */
+  toolBackend?: ToolBackend;
+  /** Attach to the live turn instead of starting one (tool-result re-invocation, #37). Consumed at run entry. */
+  attachToActiveTurn?: boolean;
+  /** Next queued parked loopback call, if any (opencode backend). */
+  takeParkedToolCall?(): ParkedCall | undefined;
+  /** Wait for the next parked loopback call without removing it. */
+  watchParkedToolCall?(): { wait: Promise<ParkedCall>; cancel(): void };
+  /** Whether the loopback bridge still holds this call parked. */
+  hasParkedToolCall?(toolCallId: string): boolean;
+  /** Resolve a parked loopback call with the OpenCode tool result. */
+  resolveParkedToolCall?(toolCallId: string, resultText: string): "resolved" | "already-resolved" | "unknown";
+  /** Publish OpenCode's forwarded tools on the loopback bridge. */
+  syncLoopbackTools?(tools: readonly unknown[]): void;
   updateCursor?(cursor: string): Promise<void>;
   recordTurnCompleted?(turnId: string, terminal: string, usage?: Record<string, unknown>): Promise<void>;
   release?(): Promise<void>;
@@ -158,6 +177,25 @@ function describeApprovals(runtime: MuseLanguageRuntime, sessionID: string) {
 function describeUserInputQuestion(runtime: MuseLanguageRuntime, sessionID: string) {
   return (_userInputId: string) =>
     runtime.describeCurrentUserInputQuestion?.(sessionID);
+}
+
+/** A parked loopback call as a bridge notification for the stream mapper. */
+function syntheticParkedNotification(
+  session: MuseTurnSession,
+  turnId: string | undefined,
+  parked: ParkedCall,
+): MspNotification {
+  return {
+    jsonrpc: "2.0",
+    method: "bridge/tool-parked",
+    params: {
+      sessionId: session.sessionId,
+      turnId,
+      mcpCallId: parked.callId,
+      toolName: parked.toolName,
+      args: parked.args,
+    },
+  };
 }
 
 /** Length of the shared leading run: the retained transcript prefix after a rewind. */
@@ -358,17 +396,24 @@ export async function runMuseTurn(
   const steerTarget = !joinedTurn ? session.steerExpectedTurnId : undefined;
   session.steerExpectedTurnId = undefined;
   const steering = steerTarget !== undefined;
-  if (!joinedTurn && !steering) {
+  // Opencode backend (#37): a tool-result re-invocation attaches to the live
+  // turn. It consumes the handoff the emitting stream left for it, so the
+  // completing drainer releases the lease exactly once.
+  const attachTurn = session.attachToActiveTurn === true && !joinedTurn && !steering && session.activeTurnId !== undefined;
+  session.attachToActiveTurn = undefined;
+  if (!joinedTurn && !steering && !attachTurn) {
     // A fresh turn resumes single ownership: stale takeover counts die here,
     // bounding any leak from a join that never drained to one extra turn.
     // Steers keep the re-entry count so all drainers share one lease release.
     session.handoffTakeovers = 0;
+  } else if (attachTurn) {
+    session.handoffTakeovers = Math.max(0, (session.handoffTakeovers ?? 0) - 1);
   }
 
   const cancel = () => {
     if (cancelPromise) return cancelPromise;
     // A superseded stream detaches silently: the joining call owns the turn now.
-    if (!joinedTurn && (session.handoffTakeovers ?? 0) > 0) return Promise.resolve();
+    if (!joinedTurn && !attachTurn && (session.handoffTakeovers ?? 0) > 0) return Promise.resolve();
     const denyParked = async () => {
       try {
         await session.cancelParkedApprovals?.();
@@ -403,6 +448,16 @@ export async function runMuseTurn(
       disposition = "joined";
       subscriptionController = new AbortController();
       subscription = session.host.subscribe(session.sessionId, session.replayAfterCursor, subscriptionController.signal)[Symbol.asyncIterator]();
+      firstNotification = subscription.next();
+      accepted = true;
+    } else if (attachTurn) {
+      // Attach to the live turn with resolved tool results: no turn/start,
+      // no model switch, no acceptance record. The parked loopback calls are
+      // already resolved; this stream drains the turn's remaining events.
+      turnId = session.activeTurnId!;
+      disposition = "joined";
+      subscriptionController = new AbortController();
+      subscription = session.host.subscribe(session.sessionId, session.viewCursor, subscriptionController.signal)[Symbol.asyncIterator]();
       firstNotification = subscription.next();
       accepted = true;
     } else {
@@ -470,6 +525,7 @@ export async function runMuseTurn(
       [Symbol.asyncIterator]: async function* () {
         const itemTurnIds = new Map<string, string>();
         const seenNotifications = new Set<string>();
+        let parkedBreak = false;
         const processNotification = async function* (notification: MspNotification): AsyncIterable<MspNotification> {
           const params = notification.params ?? {};
           if (params.sessionId !== session.sessionId) return;
@@ -512,9 +568,44 @@ export async function runMuseTurn(
               for await (const output of processNotification(notification)) yield output;
               if (terminalSeen) return;
             }
+            // Opencode backend: surface parked loopback calls as native tool
+            // calls the moment they arrive. The turn stays open server-side
+            // (parked), so ending the OpenCode turn here must not wait for
+            // another Muse event — core executes, then re-invokes with the
+            // result, and that call attaches to the live turn. The handoff
+            // count pays for the attaching drainer; the emitter only detaches.
+            if (session.toolBackend === "opencode") {
+              const queued = session.takeParkedToolCall?.();
+              if (queued) {
+                for await (const output of processNotification(syntheticParkedNotification(session, turnId, queued))) yield output;
+                parkedBreak = true;
+                session.handoffTakeovers = (session.handoffTakeovers ?? 0) + 1;
+                break;
+              }
+              const watcher = session.watchParkedToolCall?.();
+              if (watcher) {
+                try {
+                  const raced = await Promise.race([
+                    subscription!.next().then((result) => ({ result })),
+                    watcher.wait.then((call) => ({ call })),
+                  ]);
+                  if ("call" in raced) {
+                    session.takeParkedToolCall?.();
+                    for await (const output of processNotification(syntheticParkedNotification(session, turnId, raced.call))) yield output;
+                    parkedBreak = true;
+                    session.handoffTakeovers = (session.handoffTakeovers ?? 0) + 1;
+                    break;
+                  }
+                  next = raced.result;
+                  continue;
+                } finally {
+                  watcher.cancel();
+                }
+              }
+            }
             next = await subscription!.next();
           }
-          if (!terminalSeen) throw new MspTransportError();
+          if (!terminalSeen && !parkedBreak) throw new MspTransportError();
         } finally {
           options.abortSignal?.removeEventListener("abort", onAbort);
           subscriptionController?.abort();
@@ -523,11 +614,15 @@ export async function runMuseTurn(
           // without releasing. The last finisher releases only while no newer
           // turn owns the lease — the wrapper closes the stream at finish
           // while this teardown still runs detached, so a fast follow-up may
-          // have reused the lease already.
-          const takeovers = session.handoffTakeovers ?? 0;
-          if (takeovers > 0) session.handoffTakeovers = takeovers - 1;
-          else if (session.activeTurnId === undefined || session.activeTurnId === turnId) {
-            await session.release?.();
+          // have reused the lease already. A parked break is not a finish:
+          // the turn stays live, so the handoff is left for the attaching
+          // drainer to consume and the lease is never released here.
+          if (!parkedBreak) {
+            const takeovers = session.handoffTakeovers ?? 0;
+            if (takeovers > 0) session.handoffTakeovers = takeovers - 1;
+            else if (session.activeTurnId === undefined || session.activeTurnId === turnId) {
+              await session.release?.();
+            }
           }
         }
       },
@@ -717,6 +812,49 @@ export function createMuseLanguageModel(runtime: MuseLanguageRuntime, modelID: s
     });
     // Set by the manager when the settled verdicts matched a parked turn.
     const joining = session.joinParkedTurnId !== undefined;
+    // Opencode backend (#37): publish OpenCode's forwarded tools on the
+    // loopback bridge, then attach tool-result re-invocations to the live
+    // turn instead of starting one. Every result must address a parked call
+    // (already-resolved repeats are skipped); anything else fails closed
+    // before touching the turn.
+    if (session.toolBackend === "opencode") {
+      const forwarded = (options as { tools?: unknown }).tools;
+      if (Array.isArray(forwarded) && forwarded.length > 0) {
+        session.syncLoopbackTools?.(forwarded);
+      }
+      if (!joining && session.activeTurnId !== undefined) {
+        const toolResults = extractToolResults(options.prompt);
+        if (toolResults.length > 0) {
+          for (const toolResult of toolResults) {
+            const outcome = session.resolveParkedToolCall?.(toolResult.toolCallId, toolResult.outputText) ?? "unknown";
+            if (outcome === "unknown") {
+              await session.release?.();
+              throw new MuseUnsupportedInputError("tool-result");
+            }
+          }
+          session.attachToActiveTurn = true;
+          const execution = await runMuseTurn(context, [], options, {
+            ...runtime,
+            resolveSession: async () => session,
+          }, currentFingerprints);
+          return {
+            context,
+            execution,
+            mapper: new MuseStreamMapper(
+              execution.turnId,
+              session.emittedApprovalPrompts,
+              describeApprovals(runtime, context.sessionID),
+              describeUserInputQuestion(runtime, context.sessionID),
+            ),
+            warnings: ignoredOptionWarnings(supportedOptions.options.ignoredOptions),
+            epoch: session.streamEpoch,
+            session,
+            initialText: undefined,
+            syntheticOnly: false,
+          };
+        }
+      }
+    }
     // The effort tier arrives as the resolved request variant (Ctrl+T,
     // OpenCode's /effort, or a #variant model suffix); "default" already
     // resolved to the catalog default upstream. Unknown variants fail closed

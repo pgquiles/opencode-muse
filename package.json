@@ -48,6 +48,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@muse-code/sdk": "1.4.14"
   },
   "devDependencies": {

@@ -26,6 +26,12 @@ import {
   type ContributorMode,
   type ServeHelpRunner,
 } from "./msp/contributor.js";
+import {
+  TOOL_BACKEND_ENV,
+  TOOL_BACKEND_OPTION,
+  resolveToolBackend,
+  type ToolBackend,
+} from "./msp/tool-backend.js";
 type ProviderEditor = Parameters<Parameters<Plugin.Context["provider"]["transform"]>[0]>[0];
 
 export type MuseProviderContext = Pick<Plugin.Context, "provider" | "session" | "aisdk" | "options"> & {
@@ -38,6 +44,7 @@ export interface SessionManagerBase {
   workspaceLock: WorkspaceLock;
   museBin?: string;
   contributorMode: ContributorMode;
+  toolBackend: ToolBackend;
 }
 
 export interface ProviderPluginDependencies {
@@ -102,6 +109,16 @@ export async function createProviderPlugin(
   );
   const museBin = dependencies.museBin;
   await assertContributorFlagSupported(museBin ?? "muse", dependencies.serveHelpRunner);
+  // Tool backend (#37): an explicit plugin option wins, then the namespaced
+  // env var, otherwise the vetted default ("muse"). Anything else fails
+  // closed before any serve child starts. Process-wide: request.model
+  // carries only id/provider/variant, so per-model options are not settable.
+  const toolBackend = resolveToolBackend(
+    ctx.options?.[TOOL_BACKEND_OPTION] ?? process.env[TOOL_BACKEND_ENV],
+  );
+  if (toolBackend === "opencode") {
+    console.warn("opencode-muse: OpenCode tools backend is enabled (OPENCODE_MUSE_TOOL_BACKEND=opencode): Muse runs host-provided tools through the loopback bridge; OpenCode permissions apply. Approval review: #37.");
+  }
   const paygNotice = paygBillingNotice();
   if (paygNotice) console.warn(`opencode-muse: ${paygNotice}`);
   // The lane below is requested from our own spawn args, never confirmed by
@@ -117,6 +134,7 @@ export async function createProviderPlugin(
     workspaceLock: new WorkspaceLock({ stateDirectory }),
     museBin,
     contributorMode,
+    toolBackend,
   };
   const sessions = dependencies.createSessionManager?.(managerBase) ?? new MuseSessionManager(managerBase);
   const registration = await ctx.provider.transform((providers: ProviderEditor) => {
@@ -147,6 +165,7 @@ export async function createProviderPlugin(
           return staged;
         },
         resolveSession: (context, options) => sessions.resolveSession(context, options),
+        forkSessionAtBoundary: (sessionID, retainedLength) => sessions.forkSessionAtBoundary(sessionID, retainedLength),
         previousTranscriptFingerprints: (sessionID) => sessions.previousTranscriptFingerprints(sessionID),
         consumeRecoveryDecision: (sessionID, text, directory) => sessions.consumeRecoveryDecision(sessionID, text, directory),
         settleApprovalResponses: (sessionID, responses) => sessions.settleApprovalResponses(sessionID, responses),

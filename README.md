@@ -97,6 +97,28 @@ billing the wrong lane. Confirm the requested lane in the startup log and
 the billed lane with `muse usage`. See
 [#29](https://github.com/pgquiles/opencode-muse/issues/29).
 
+Which tools execute a turn is a separate process-wide choice, also read once
+when the plugin loads:
+
+| Value | Meaning |
+|---|---|
+| unset (default) | Muse tools: Muse's own prompt and tools run the turn (vetted path) |
+| `muse` | Same as the default, explicit |
+| `opencode` | OpenCode tools: Muse acts as the model while OpenCode executes tools |
+
+```sh
+# One session with OpenCode tools instead of Muse tools:
+OPENCODE_MUSE_TOOL_BACKEND=opencode opencode
+```
+
+Restart after changing it. Anything else fails setup instead of silently
+running the wrong backend. With `opencode`, the plugin points Muse at a
+private per-session config whose prompt/toolset is a loopback MCP bridge;
+`approvalMode: "allowAll"` lets Muse run without asking, so OpenCode's own
+permissions become the only fence. Private state lives under the XDG data
+directory; your real Muse config is never read or modified. See
+[#37](https://github.com/pgquiles/opencode-muse/issues/37).
+
 ## Features
 
 - Use Muse Code models from OpenCode or OpenChamber after adding the package to

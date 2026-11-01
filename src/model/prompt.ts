@@ -251,6 +251,45 @@ export function latestUserText(
   return "";
 }
 
+export interface ExtractedToolResult {
+  toolCallId: string;
+  outputText: string;
+}
+
+/**
+ * Tool results addressed to the bridge (opencode backend, #37). Only `tool`
+ * role messages with well-formed `tool-result` parts count; history
+ * `assistant` tool-call parts never do. Anything else fails closed upstream.
+ */
+export function extractToolResults(prompt: LanguageModelV3Prompt): ExtractedToolResult[] {
+  const results: ExtractedToolResult[] = [];
+  if (!Array.isArray(prompt)) return results;
+  for (const message of prompt) {
+    if (typeof message !== "object" || message === null) continue;
+    const record = message as { role?: unknown; content?: unknown };
+    if (record.role !== "tool" || !Array.isArray(record.content)) continue;
+    for (const part of record.content) {
+      if (typeof part !== "object" || part === null) continue;
+      const candidate = part as { type?: unknown; toolCallId?: unknown; output?: unknown };
+      if (candidate.type !== "tool-result" || typeof candidate.toolCallId !== "string") continue;
+      results.push({ toolCallId: candidate.toolCallId, outputText: stringifyToolOutput(candidate.output) });
+    }
+  }
+  return results;
+}
+
+function stringifyToolOutput(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (typeof output === "object" && output !== null && "text" in output && typeof (output as { text: unknown }).text === "string") {
+    return (output as { text: string }).text;
+  }
+  try {
+    return JSON.stringify(output) ?? "null";
+  } catch {
+    return "null";
+  }
+}
+
 export async function extractTurnInput(
   prompt: LanguageModelV3Prompt,
   previousTranscriptFingerprints: readonly string[],

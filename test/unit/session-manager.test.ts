@@ -53,6 +53,7 @@ function managerAt(
   workspaceLockOverride?: WorkspaceLock,
   closeGate?: { started(): void; wait: Promise<void> },
   contributorMode?: ContributorMode,
+  toolBackend?: "muse" | "opencode",
 ) {
   let id = 0;
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -66,6 +67,7 @@ function managerAt(
     registry,
     workspaceLock: workspaceLockOverride ?? new WorkspaceLock({ stateDirectory: root }),
     contributorMode,
+    toolBackend,
     async createHost(options) {
       hostOptions.push(options as unknown as Record<string, unknown>);
       const record = { closeCount: 0 };
@@ -1179,6 +1181,51 @@ describe("rewind/fork anchors and explicit-cut fork", () => {
     expect("cutPoint" in (fork?.params ?? {})).toBe(false);
     expect(binding.sessionId).toMatch(/^ses_muse_fork_/);
     expect((await storedFor(root, "ses_oc_child", directory))?.turnAnchors).toEqual([]);
+    await manager.close();
+  });
+
+  test("sessionManager.opencodeBackendStartsWithLoopbackConfigAndAllowAll", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const userMuse = join(root, "user-muse");
+    mkdirSync(userMuse, { recursive: true });
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    try {
+      const { manager, calls, hostOptions } = managerAt(root, false, false, undefined, undefined, undefined, undefined, "opencode");
+      const binding = await manager.resolveSession(context("ses_oc_1", directory));
+
+      const start = calls.find((call) => call.method === "session/start");
+      expect(start?.params).toMatchObject({ approvalMode: "allowAll" });
+      const servers = (start?.params.config as { mcpServers?: Record<string, { transport?: string; url?: string; headers?: Record<string, string>; mode?: string }> } | undefined)?.mcpServers;
+      expect(servers?.["opencode-loopback"]?.transport).toBe("streamableHttp");
+      expect(servers?.["opencode-loopback"]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp\//);
+      expect(servers?.["opencode-loopback"]?.headers?.Authorization).toMatch(/^Bearer [0-9a-f]{48}$/);
+      expect(servers?.["opencode-loopback"]?.mode).toBe("required");
+      expect(String(hostOptions[0]?.env?.XDG_CONFIG_HOME ?? "")).toContain(join("hosts", "ses_oc_1"));
+      expect(binding.sessionId).toMatch(/^ses_muse_/);
+      await binding.release?.();
+      await manager.close();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+  });
+
+  test("sessionManager.museBackendOmitsLoopbackConfig", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const { manager, calls, hostOptions } = managerAt(root);
+    const binding = await manager.resolveSession(context("ses_oc_1", directory));
+
+    const start = calls.find((call) => call.method === "session/start");
+    expect(start?.params).toMatchObject({ approvalMode: "onRequest" });
+    expect("config" in (start?.params ?? {})).toBe(false);
+    expect(hostOptions[0]?.env).toBeUndefined();
+    expect(binding.sessionId).toMatch(/^ses_muse_/);
+    await binding.release?.();
     await manager.close();
   });
 

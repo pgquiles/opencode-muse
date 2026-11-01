@@ -39,11 +39,16 @@ import {
 import {
   MspCommandRejectedError,
   MuseRecoveryChoiceRequiredError,
+  MuseUnsupportedInputError,
   MuseUnsupportedRequestError,
   RegistryWorkspaceMismatchError,
   WorkspaceBusyError,
 } from "../errors.js";
-import type { PendingCommandRecord, SessionRegistry, SessionRegistryEntry, TurnAnchor } from "./registry.js";
+import { SessionRegistry } from "./registry.js";
+import type { PendingCommandRecord, SessionRegistryEntry, TurnAnchor } from "./registry.js";
+import type { ToolBackend } from "../msp/tool-backend.js";
+import { sweepHostConfigs, userMuseConfigDir, writeHostConfig } from "../msp/host-config.js";
+import { LoopbackMcpServer, type ParkedCall } from "../mcp/loopback.js";
 import type { LockLease, WorkspaceLock } from "./workspace-lock.js";
 import type { MuseTurnSession } from "../model/language-model.js";
 import type { AgentContextResult } from "../model/agent-context.js";
@@ -52,6 +57,9 @@ export interface MuseSessionHost extends Pick<MspHost, "command" | "request" | "
   initializeResult: Record<string, unknown>;
 }
 
+/** Host configs older than this are crashed-process leftovers (Pi parity). */
+const STALE_HOST_CONFIG_MS = 24 * 60 * 60 * 1000;
+
 export interface MuseSessionManagerOptions {
   stateDirectory?: string;
   registry: SessionRegistry;
@@ -59,7 +67,9 @@ export interface MuseSessionManagerOptions {
   museBin?: string;
   /** Requested billing lane; defaults to "on" (matches the Muse TUI). */
   contributorMode?: ContributorMode;
-  createHost?(options: { museBin?: string; cwd: string; args: readonly string[]; capabilities?: Parameters<MspHandshake["initialize"]>[0]["capabilities"] }): Promise<MuseSessionHost>;
+  /** Tool backend; defaults to "muse" (vetted Shape B). "opencode" is explicit opt-in (#37). */
+  toolBackend?: ToolBackend;
+  createHost?(options: { museBin?: string; cwd: string; args: readonly string[]; env?: NodeJS.ProcessEnv; capabilities?: Parameters<MspHandshake["initialize"]>[0]["capabilities"] }): Promise<MuseSessionHost>;
   videoChunkBytes?: number;
   /** Worktree lifecycle seam (#34); defaults to git. */
   worktreeVcs?: WorktreeVcs;
@@ -69,6 +79,9 @@ interface ManagedBinding extends Omit<MuseTurnSession, "host"> {
   host: MuseSessionHost;
   workspaceFingerprint: string;
   museSessionId: string;
+  toolBackend: ToolBackend;
+  /** Opencode backend only: loopback MCP bridge serving OpenCode tools. */
+  loopback?: LoopbackMcpServer;
   hostId: string;
   viewCursor?: string;
   transcriptFingerprints: string[];
@@ -123,17 +136,20 @@ export class MuseSessionManager {
   private readonly bindings = new Map<string, ManagedBinding>();
   private readonly contextBySession = new Map<string, AgentContextResult>();
   private readonly contributorMode: ContributorMode;
+  private readonly toolBackend: ToolBackend;
   private readonly createHost: NonNullable<MuseSessionManagerOptions["createHost"]>;
   private readonly worktreeVcs: WorktreeVcs;
   private closed = false;
 
   constructor(private readonly options: MuseSessionManagerOptions) {
     this.contributorMode = options.contributorMode ?? "on";
+    this.toolBackend = options.toolBackend ?? "muse";
     this.worktreeVcs = options.worktreeVcs ?? defaultWorktreeVcs;
-    this.createHost = options.createHost ?? (async ({ museBin, cwd, args, capabilities }) => MspHost.start({
+    this.createHost = options.createHost ?? (async ({ museBin, cwd, args, env, capabilities }) => MspHost.start({
       museBin,
       cwd,
       args,
+      env,
       capabilities,
       startupTimeoutMs: 20_000,
       commandTimeoutMs: 30_000,
@@ -205,6 +221,7 @@ export class MuseSessionManager {
     const lease = liveLease ?? await this.options.workspaceLock.acquire(fingerprint, context.sessionID);
     const freshLease = liveLease === undefined;
     let host: MuseSessionHost | undefined;
+    let ownedLoopback: LoopbackMcpServer | undefined;
     try {
       const stored = await this.options.registry.get(context.sessionID, fingerprint);
       const poisoned = stored !== undefined
@@ -236,10 +253,32 @@ export class MuseSessionManager {
         return existingBinding;
       }
 
+      // Opencode backend (#37): isolate the serve child behind a private,
+      // bridge-authored XDG config and serve OpenCode tools over a loopback
+      // MCP bridge advertised on session start/resume. Parked loopback calls
+      // fail fast until the turn flow wires execution through OpenCode core.
+      let backendEnv: NodeJS.ProcessEnv | undefined;
+      let loopback: LoopbackMcpServer | undefined;
+      if (this.toolBackend === "opencode") {
+        const stateDirectory = this.options.stateDirectory ?? SessionRegistry.resolveStateDirectory();
+        sweepHostConfigs(stateDirectory, STALE_HOST_CONFIG_MS);
+        const hostXdg = writeHostConfig(stateDirectory, context.sessionID, { authSourceDir: userMuseConfigDir() });
+        backendEnv = { ...process.env, XDG_CONFIG_HOME: hostXdg };
+        // A live same-process binding returns before this point, so a fresh
+        // loopback is always needed here; restarts resume with the new URL.
+        // Parked calls wait for the turn flow to surface them as native
+        // OpenCode tool calls; the loopback timeout bounds a lost consumer.
+        const created = new LoopbackMcpServer({ sessionKey: context.sessionID, tools: [] });
+        await created.listen();
+        loopback = created;
+        ownedLoopback = created;
+      }
+
       host = await this.createHost({
         museBin: this.options.museBin,
         cwd: canonicalDirectory,
         args: baseServeArgs(stored?.providerId ?? selected.providerId, this.contributorMode),
+        env: backendEnv,
         capabilities: { userInputDialogs: false, experimentalApi: true },
       });
       const durability = host.initializeResult.sessionDurability;
@@ -276,11 +315,15 @@ export class MuseSessionManager {
           }
         }
       }
+      const backendConfig = this.toolBackend === "opencode" && loopback ? this.backendSessionConfig(loopback) : undefined;
       if (!adoptedFork && stored && durability !== "ephemeral") {
         const resumed = await host.command("session/resume", {
           commandId: host.mintCommandId(),
           sessionId: stored.museSessionId,
           ...(stored.viewCursor ? { cursor: stored.viewCursor } : {}),
+          // A restarted bridge brings a fresh loopback URL; the resumed
+          // session must point at the live one.
+          ...(backendConfig ? { config: backendConfig } : {}),
         });
         const resumedSession = resumed.session as { activeTurnId?: unknown } | undefined;
         if (!resumedSession || !Object.hasOwn(resumedSession, "activeTurnId") || resumedSession.activeTurnId !== null) {
@@ -310,10 +353,14 @@ export class MuseSessionManager {
           workspaceRoot: canonicalDirectory,
           providerId: selected.providerId,
           modelId: selected.modelId,
-          // #22: Muse must ask through approval/request so OpenCode stays in
-          // the loop; the host default would let side-effectful actions
-          // through silently.
-          approvalMode: "onRequest",
+          // Muse backend (#22): Muse must ask through approval/request so
+          // OpenCode stays in the loop; the host default would let
+          // side-effectful actions through silently. Opencode backend (#37):
+          // Muse never asks — OpenCode's native permission evaluation is the
+          // only fence, so a second Muse-side prompt would double-ask at
+          // best and hang at worst.
+          approvalMode: this.toolBackend === "opencode" ? "allowAll" : "onRequest",
+          ...(backendConfig ? { config: backendConfig } : {}),
         };
         let start: Record<string, unknown>;
         let worktreeAttempted = false;
@@ -382,10 +429,15 @@ export class MuseSessionManager {
         ? { providerId: stored.providerId ?? selected.providerId, modelId: stored.modelId ?? selected.modelId, profileId: stored.profileId ?? null }
         : { providerId: selected.providerId, modelId: selected.modelId, profileId: null };
       const sessionContext = this.contextBySession.get(context.sessionID);
+      if (this.toolBackend === "opencode") {
+        sessionNotices.push("Opencode tools backend: this Muse session runs host-provided tools through the loopback bridge; OpenCode permissions apply.");
+      }
       const binding: ManagedBinding = {
         host,
         sessionId: museSessionId,
         museSessionId,
+        toolBackend: this.toolBackend,
+        loopback,
         hostId: randomUUID(),
         workspaceFingerprint: fingerprint,
         viewCursor,
@@ -462,6 +514,49 @@ export class MuseSessionManager {
           binding.lease = undefined;
           await currentLease?.release();
         },
+        takeParkedToolCall() {
+          return binding.loopback?.takeParked();
+        },
+        watchParkedToolCall() {
+          const loopback = binding.loopback;
+          if (!loopback) {
+            let cancel = () => {};
+            const wait = new Promise<ParkedCall>(() => {});
+            return { wait, cancel };
+          }
+          return loopback.watchParked();
+        },
+        hasParkedToolCall(toolCallId) {
+          return binding.loopback?.has(toolCallId) ?? false;
+        },
+        resolveParkedToolCall(toolCallId, resultText) {
+          const loopback = binding.loopback;
+          if (!loopback) return "unknown";
+          if (loopback.resolve(toolCallId, { text: resultText })) return "resolved";
+          return loopback.wasResolved(toolCallId) ? "already-resolved" : "unknown";
+        },
+        syncLoopbackTools(tools) {
+          const loopback = binding.loopback;
+          if (!loopback) return;
+          const converted: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [];
+          for (const tool of tools) {
+            if (typeof tool !== "object" || tool === null) continue;
+            const candidate = tool as { name?: unknown; description?: unknown; inputSchema?: unknown };
+            if (typeof candidate.name !== "string" || candidate.name.length === 0) continue;
+            converted.push({
+              name: candidate.name,
+              description: typeof candidate.description === "string" ? candidate.description : "",
+              inputSchema: typeof candidate.inputSchema === "object" && candidate.inputSchema !== null
+                ? candidate.inputSchema as Record<string, unknown>
+                : { type: "object" },
+            });
+          }
+          // Forwarded tools always convert: an empty result means the bridge
+          // and core disagree about the tool shape, and running tool-less
+          // would silently drop the user's request.
+          if (tools.length > 0 && converted.length === 0) throw new MuseUnsupportedInputError("tools");
+          loopback.setTools(converted);
+        },
         async commitTranscriptFingerprints(fingerprints) {
           const previousTranscript = binding.transcriptFingerprints;
           const previousFingerprints = binding.previousTranscriptFingerprints;
@@ -510,8 +605,27 @@ export class MuseSessionManager {
     } catch (error) {
       await lease.release();
       if (host) await host.close().catch(() => {});
+      if (ownedLoopback) await ownedLoopback.close().catch(() => {});
       throw error;
     }
+  }
+
+  /**
+   * Session extension for the opencode backend (#37): the loopback MCP
+   * bridge advertised to this session. `mode: "required"` fails session
+   * setup fast when the bridge is unreachable instead of running tool-less.
+   */
+  private backendSessionConfig(loopback: LoopbackMcpServer): Record<string, unknown> {
+    return {
+      mcpServers: {
+        "opencode-loopback": {
+          transport: "streamableHttp",
+          url: loopback.url,
+          headers: { Authorization: `Bearer ${loopback.token}` },
+          mode: "required",
+        },
+      },
+    };
   }
 
   /**
@@ -1022,6 +1136,7 @@ export class MuseSessionManager {
         // The diagnostic may include CLI stderr; shutdown must still release
         // the local lease once the owned process has been asked to stop.
       } finally {
+        await binding.loopback?.close().catch(() => {});
         await binding.release?.().catch(() => {});
       }
     }));
