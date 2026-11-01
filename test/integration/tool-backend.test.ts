@@ -205,6 +205,85 @@ describe("opencode backend turn flow", () => {
     expect(parts.at(-1)).toMatchObject({ type: "finish", finishReason: { unified: "stop", raw: "completed" } });
   });
 
+  test("toolBackend.alreadyResolvedToolResultSkipsAndDrains", async () => {
+    const history = prompt(
+      ["user", "first request"],
+      ["assistant", "first answer"],
+    );
+    const stored = fingerprintTranscript(history);
+    const calls: Array<{ method: string; sessionId?: string }> = [];
+    let completed = false;
+    const session: Record<string, unknown> = {
+      host: {
+        mintCommandId: () => "018f4f17-9c2a-7c1a-a0fd-67a19db5d1f",
+        async command(method: string, params: Record<string, unknown>) {
+          calls.push({ method, sessionId: params.sessionId as string | undefined });
+          return {};
+        },
+        async request() { return {}; },
+        subscribe() {
+          return {
+            [Symbol.asyncIterator]() {
+              let index = 0;
+              const events = [
+                { method: "turn/started", params: { sessionId: "ses_muse_old", turnId: "turn_live", viewCursor: "c1" } },
+                { method: "turn/completed", params: { sessionId: "ses_muse_old", turnId: "turn_live", terminal: "completed", viewCursor: "c2" } },
+              ];
+              return {
+                async next() {
+                  if (index >= events.length) return { done: true as const, value: undefined };
+                  return { done: false as const, value: events[index++] };
+                },
+                async return() { return { done: true as const, value: undefined }; },
+              };
+            },
+          };
+        },
+      },
+      sessionId: "ses_muse_old",
+      museSessionId: "ses_muse_old",
+      toolBackend: "opencode",
+      activeTurnId: "turn_live",
+      previousTranscriptFingerprints: stored,
+      contextAllowlist: [],
+      sessionNotices: [],
+      compactionFingerprints: [],
+      emittedApprovalPrompts: new Set<string>(),
+      handoffTakeovers: 0,
+      streamEpoch: 0,
+      currentSelection: selection,
+      async recordPendingCommand() {},
+      async clearPendingCommand() {},
+      async recordTurnAccepted() {},
+      async updateCursor() {},
+      async recordTurnCompleted(_turnId: string, terminal: string) { completed = terminal === "completed"; },
+      async commitTranscriptFingerprints() {},
+      async release() {},
+      hasParkedToolCall: () => false,
+      // Late duplicate for a settled call (timed out or already resolved):
+      // skipped, never thrown, and the live turn still drains.
+      resolveParkedToolCall: () => "already-resolved",
+      takeParkedToolCall: () => undefined,
+    };
+    const runtime: MuseLanguageRuntime = {
+      selectionIndex: new Map([[modelId, selection]]),
+      async resolveSession() { return session as never; },
+      previousTranscriptFingerprints: () => stored,
+    };
+    const model = createMuseLanguageModel(runtime, modelId);
+    const parts = await collect((await model.doStream({
+      prompt: [
+        ...history,
+        { role: "tool", content: [{ type: "tool-result", toolCallId: "mc_1", output: { type: "text", text: "late" } }] },
+      ],
+      headers: headers("ses_oc_1"),
+    } as never)).stream as ReadableStream<unknown>);
+
+    expect(calls.some((call) => call.method === "turn/start")).toBe(false);
+    expect(completed).toBe(true);
+    expect(parts.at(-1)).toMatchObject({ type: "finish", finishReason: { unified: "stop", raw: "completed" } });
+  });
+
   test("toolBackend.unmatchedToolResultFailsClosed", async () => {
     const history = prompt(["user", "first request"], ["assistant", "first answer"]);
     const stored = fingerprintTranscript(history);

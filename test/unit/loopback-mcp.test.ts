@@ -74,6 +74,77 @@ describe("loopback MCP bridge", () => {
     }
   });
 
+  test("loopbackMcp.timeoutEvictsQueueAndSettlesId", async () => {
+    const server = new LoopbackMcpServer({ sessionKey: "ses_loop_timeout", tools: TOOLS, toolTimeoutMs: 60 });
+    servers.push(server);
+    await server.listen();
+    const { client, transport } = await clientFor(server);
+    try {
+      const delivered = client.callTool({ name: "opencode_write", arguments: { path: "slow.txt" }, _meta: { callId: "call_slow" } });
+      delivered.catch(() => {});
+      for (let attempt = 0; attempt < 200 && server.pendingCount() !== 0; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(server.pendingCount()).toBe(0);
+      await expect(delivered).rejects.toThrow(/timed out/);
+      // The corpse must never surface as a live call, and a late duplicate
+      // must read as settled (skip), not unknown (throw).
+      expect(server.takeParked()).toBeUndefined();
+      expect(server.wasResolved("call_slow")).toBe(true);
+      expect(server.resolve("call_slow", { text: "late" })).toBe(false);
+    } finally {
+      await transport.close();
+    }
+  });
+
+  test("loopbackMcp.failEvictsQueueAndSettlesId", async () => {
+    const server = new LoopbackMcpServer({ sessionKey: "ses_loop_fail", tools: TOOLS, onParked: () => {} });
+    servers.push(server);
+    await server.listen();
+    const { client, transport } = await clientFor(server);
+    try {
+      const delivered = client.callTool({ name: "opencode_write", arguments: {}, _meta: { callId: "call_denied" } });
+      delivered.catch(() => {});
+      for (let attempt = 0; attempt < 100 && server.pendingCount() === 0; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(server.fail("call_denied", "denied by test")).toBe(true);
+      await expect(delivered).rejects.toThrow(/denied by test/);
+      expect(server.takeParked()).toBeUndefined();
+      expect(server.wasResolved("call_denied")).toBe(true);
+    } finally {
+      await transport.close();
+    }
+  });
+
+  test("loopbackMcp.settledIdsStayBounded", async () => {
+    const server = new LoopbackMcpServer({ sessionKey: "ses_loop_cap", tools: TOOLS, maxSettledIds: 10 });
+    servers.push(server);
+    await server.listen();
+    const { client, transport } = await clientFor(server);
+    try {
+      const total = 12;
+      const deliveries: Array<Promise<unknown>> = [];
+      for (let i = 0; i < total; i += 1) {
+        deliveries.push(client.callTool({ name: "opencode_write", arguments: { i }, _meta: { callId: `cap_${i}` } }).catch(() => {}));
+      }
+      for (let attempt = 0; attempt < 200 && server.pendingCount() < total; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(server.pendingCount()).toBe(total);
+      for (let i = 0; i < total; i += 1) {
+        expect(server.resolve(`cap_${i}`, { text: "ok" })).toBe(true);
+      }
+      await Promise.all(deliveries);
+      expect(server.wasResolved(`cap_${total - 1}`)).toBe(true);
+      expect(server.wasResolved("cap_0")).toBe(false);
+      expect(server.wasResolved("cap_1")).toBe(false);
+      expect(server.wasResolved("cap_2")).toBe(true);
+    } finally {
+      await transport.close();
+    }
+  });
+
   test("loopbackMcp.closeRejectsParkedCalls", async () => {
     const server = new LoopbackMcpServer({
       sessionKey: "ses_loop_3",

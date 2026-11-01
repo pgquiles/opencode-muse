@@ -21,7 +21,16 @@ export interface LoopbackMcpOptions {
   tools: LoopbackToolDefinition[];
   onParked?: (call: ParkedCall) => void;
   toolTimeoutMs?: number;
+  /** Bound on settled ids remembered for duplicate suppression (default 1000). */
+  maxSettledIds?: number;
 }
+
+/**
+ * Upper bound on settled call ids remembered for duplicate suppression.
+ * Sessions never park this many calls; the cap only bites in a runaway, and
+ * insertion order makes the trim first-in-first-out.
+ */
+const MAX_SETTLED_CALL_IDS = 1000;
 
 /**
  * OpenCode tools as an in-process loopback MCP server (streamable HTTP,
@@ -46,6 +55,14 @@ export class LoopbackMcpServer {
   }>();
   private readonly parkedQueue: ParkedCall[] = [];
   private readonly parkedWaiters = new Set<(call: ParkedCall) => void>();
+  private readonly maxSettledIds: number;
+  /**
+   * Settled ids: resolved, timed out, failed, or torn down. A late duplicate
+   * (slow tool result, history resend) reads as settled and is skipped;
+   * only an id never parked reads as unknown. Survives across turns because
+   * retained history resends old results; bounded FIFO so a session cannot
+   * grow it without limit.
+   */
   private readonly resolvedIds = new Set<string>();
   private server?: Server;
   private listening?: Promise<number>;
@@ -57,6 +74,7 @@ export class LoopbackMcpServer {
     this.tools = options.tools.map((tool) => ({ ...tool }));
     this.onParked = options.onParked;
     this.toolTimeoutMs = options.toolTimeoutMs ?? 10 * 60 * 1000;
+    this.maxSettledIds = options.maxSettledIds ?? MAX_SETTLED_CALL_IDS;
     this.token = randomBytes(24).toString("hex");
   }
 
@@ -135,7 +153,7 @@ export class LoopbackMcpServer {
     if (!parked) return false;
     this.pending.delete(callId);
     clearTimeout(parked.timer);
-    this.resolvedIds.add(callId);
+    this.rememberSettled(callId);
     parked.resolve(result.text);
     return true;
   }
@@ -145,8 +163,30 @@ export class LoopbackMcpServer {
     if (!parked) return false;
     this.pending.delete(callId);
     clearTimeout(parked.timer);
+    this.evictQueued(callId);
+    this.rememberSettled(callId);
     parked.reject(new Error(message));
     return true;
+  }
+
+  /**
+   * Drop a queued entry that will never be consumed (timeout, failure):
+   * leaving the corpse would surface it later as a live tool call for an
+   * id the bridge no longer holds.
+   */
+  private evictQueued(callId: string): void {
+    const index = this.parkedQueue.findIndex((parked) => parked.callId === callId);
+    if (index >= 0) this.parkedQueue.splice(index, 1);
+  }
+
+  private rememberSettled(callId: string): void {
+    if (this.resolvedIds.has(callId)) return;
+    while (this.resolvedIds.size >= this.maxSettledIds) {
+      const oldest = this.resolvedIds.values().next().value;
+      if (oldest === undefined) break;
+      this.resolvedIds.delete(oldest);
+    }
+    this.resolvedIds.add(callId);
   }
 
   async close(): Promise<void> {
@@ -156,6 +196,7 @@ export class LoopbackMcpServer {
     for (const [callId, parked] of this.pending) {
       this.pending.delete(callId);
       clearTimeout(parked.timer);
+      this.rememberSettled(callId);
       parked.reject(new Error("Loopback MCP server closed with the call still parked."));
     }
     // Let rejected calls answer their HTTP requests before tearing down:
@@ -230,6 +271,8 @@ export class LoopbackMcpServer {
         const text = await new Promise<string>((resolve, reject) => {
           const timer = setTimeout(() => {
             this.pending.delete(callId);
+            this.evictQueued(callId);
+            this.rememberSettled(callId);
             reject(new Error(`Loopback tool call ${callId} timed out waiting for the OpenCode result.`));
           }, this.toolTimeoutMs);
           timer.unref?.();
