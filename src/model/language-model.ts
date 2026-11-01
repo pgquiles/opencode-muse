@@ -393,14 +393,19 @@ export async function runMuseTurn(
   const joinTurnId = session.joinParkedTurnId;
   session.joinParkedTurnId = undefined;
   const joinedTurn = joinTurnId !== undefined;
-  const steerTarget = !joinedTurn ? session.steerExpectedTurnId : undefined;
+  // A tool-result re-invocation attaches; it never steers, even though the
+  // manager arms a steer for every re-entry on a live turn (steering tool
+  // results as follow-up input breaks the parked turn's input contract and
+  // the fallback fresh turn has no valid input). The explicit attach flag
+  // always wins over the generic steer arming.
+  const attachTurn = session.attachToActiveTurn === true && !joinedTurn && session.activeTurnId !== undefined;
+  session.attachToActiveTurn = undefined;
+  const steerTarget = !joinedTurn && !attachTurn ? session.steerExpectedTurnId : undefined;
   session.steerExpectedTurnId = undefined;
   const steering = steerTarget !== undefined;
   // Opencode backend (#37): a tool-result re-invocation attaches to the live
   // turn. It consumes the handoff the emitting stream left for it, so the
   // completing drainer releases the lease exactly once.
-  const attachTurn = session.attachToActiveTurn === true && !joinedTurn && !steering && session.activeTurnId !== undefined;
-  session.attachToActiveTurn = undefined;
   if (!joinedTurn && !steering && !attachTurn) {
     // A fresh turn resumes single ownership: stale takeover counts die here,
     // bounding any leak from a join that never drained to one extra turn.
