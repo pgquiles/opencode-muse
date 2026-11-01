@@ -63,7 +63,7 @@ describe("request context", () => {
     expect(result).toMatchObject({ type: "context-error", code: "missing", field: "headers" });
   });
 
-  test("context.rejectsUnknownModelAndUnadvertisedVariant", () => {
+  test("context.rejectsUnknownModelAndFallsBackOnUnadvertisedTier", () => {
     const unknownHeaders = {
       [MUSE_CONTEXT_HEADERS.sessionID]: "ses_one",
       [MUSE_CONTEXT_HEADERS.directory]: "/workspace",
@@ -74,7 +74,52 @@ describe("request context", () => {
     expect(readRequestContext({ headers: unknownHeaders }, index)).toMatchObject({ code: "unknown-model" });
 
     const variantHeaders = { ...unknownHeaders, [MUSE_CONTEXT_HEADERS.modelID]: modelId, [MUSE_CONTEXT_HEADERS.variant]: "ultra" };
-    expect(readRequestContext({ headers: variantHeaders }, index)).toMatchObject({ code: "unsupported-variant" });
+    const ultra = readRequestContext({ headers: variantHeaders }, index);
+    expect(ultra).toMatchObject({ variant: "minimal", effort: "minimal" });
+  });
+
+  test("context.stillFailsClosedOnGenuinelyUnknownTierNames", () => {
+    const headers = {
+      [MUSE_CONTEXT_HEADERS.sessionID]: "ses_one",
+      [MUSE_CONTEXT_HEADERS.directory]: "/workspace",
+      [MUSE_CONTEXT_HEADERS.kind]: "primary",
+      [MUSE_CONTEXT_HEADERS.modelID]: modelId,
+      [MUSE_CONTEXT_HEADERS.providerID]: "muse",
+      [MUSE_CONTEXT_HEADERS.variant]: "turbo",
+    };
+    expect(readRequestContext({ headers }, index)).toMatchObject({ code: "unsupported-variant" });
+  });
+
+  test("context.fallsBackToLowestOfferedTier", () => {
+    const makeHeaders = (variant: string) => ({
+      [MUSE_CONTEXT_HEADERS.sessionID]: "ses_one",
+      [MUSE_CONTEXT_HEADERS.directory]: "/workspace",
+      [MUSE_CONTEXT_HEADERS.kind]: "primary",
+      [MUSE_CONTEXT_HEADERS.modelID]: modelId,
+      [MUSE_CONTEXT_HEADERS.providerID]: "muse",
+      [MUSE_CONTEXT_HEADERS.variant]: variant,
+    });
+    // "off" aliases "none"; this row offers no "none", so both land on minimal.
+    expect(readRequestContext({ headers: makeHeaders("off") }, index)).toMatchObject({ variant: "minimal", effort: "minimal" });
+    expect(readRequestContext({ headers: makeHeaders("none") }, index)).toMatchObject({ variant: "minimal", effort: "minimal" });
+    // A default that names an unoffered tier falls back the same way.
+    const highDefault: MuseModelSelection = { ...selection, defaultReasoningEffort: "xhigh" };
+    const highIndex = new Map([[modelId, highDefault]]);
+    expect(readRequestContext({ headers: makeHeaders("default") }, highIndex)).toMatchObject({ variant: "minimal", effort: "minimal" });
+  });
+
+  test("context.keepsOfferedNoneTierInsteadOfFallingBack", () => {
+    const noneOffered: MuseModelSelection = { ...selection, variants: ["none", "minimal", "high", "max"] };
+    const noneIndex = new Map([[modelId, noneOffered]]);
+    const headers = {
+      [MUSE_CONTEXT_HEADERS.sessionID]: "ses_one",
+      [MUSE_CONTEXT_HEADERS.directory]: "/workspace",
+      [MUSE_CONTEXT_HEADERS.kind]: "primary",
+      [MUSE_CONTEXT_HEADERS.modelID]: modelId,
+      [MUSE_CONTEXT_HEADERS.providerID]: "muse",
+      [MUSE_CONTEXT_HEADERS.variant]: "off",
+    };
+    expect(readRequestContext({ headers }, noneIndex)).toMatchObject({ variant: "none", effort: "none" });
   });
 
   test("context.resolvesOpenCodeDefaultVariantToModelDefaultEffort", () => {

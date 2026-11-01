@@ -11,6 +11,16 @@ export const MUSE_CONTEXT_HEADERS = Object.freeze({
 
 const REQUEST_KINDS = new Set<MuseRequestKind>(["primary", "title", "compaction", "generate"]);
 
+/**
+ * Closed reasoning-tier vocabulary in ascending order (MSP `ReasoningEffort`
+ * enum order). A requested tier the model does not offer resolves to the
+ * lowest tier it does (#45); names outside this vocabulary still fail closed.
+ */
+const EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+
+/** OpenCode-side alias for "no reasoning", matching Pi's thinking-level map. */
+const EFFORT_OFF_ALIAS = "off";
+
 export interface ModelRequestHookInput {
   sessionID: string;
   kind: string;
@@ -88,11 +98,24 @@ export function readRequestContext(
   const variant = rawVariant || undefined;
   // OpenCode's default agent sends the synthetic "default" variant when the user
   // did not choose one; resolve it to the catalog row's default reasoning effort.
-  const resolvedVariant = variant === "default"
+  const requestedVariant = variant === "default"
     ? (museSelection.defaultReasoningEffort ?? undefined)
     : variant;
-  if (resolvedVariant && (!museSelection.variantsKnown || !museSelection.variants.includes(resolvedVariant))) {
-    return contextError("unsupported-variant", "variant");
+  // "off" aliases "none"; everything else must name a real tier.
+  const requestedTier = requestedVariant === EFFORT_OFF_ALIAS ? "none" : requestedVariant;
+  let resolvedVariant = requestedTier;
+  if (requestedTier !== undefined) {
+    if (!EFFORT_ORDER.includes(requestedTier)) return contextError("unsupported-variant", "variant");
+    if (!museSelection.variantsKnown) return contextError("unsupported-variant", "variant");
+    if (!museSelection.variants.includes(requestedTier)) {
+      // Known tier the model does not offer: run at the lowest tier it does.
+      // Silent by decision (Pi parity); unknown-tier failures stay loud.
+      const offered = museSelection.variants
+        .filter((tier) => EFFORT_ORDER.includes(tier))
+        .sort((a, b) => EFFORT_ORDER.indexOf(a) - EFFORT_ORDER.indexOf(b));
+      if (offered.length === 0) return contextError("unsupported-variant", "variant");
+      resolvedVariant = offered[0];
+    }
   }
 
   return {
