@@ -155,4 +155,4 @@ const defaultSystemPrompt = [
  * bridge (probe precedent: server `probe` serves `mcp__probe__*`). An empty
  * allowlist gates every tool off — native and loopback alike.
  */
-const defaultToolset: string[] = ["mcp__opencode-loopback__*"];
+const defaultToolset: string[] = ["mcp__opencode_loopback__*"];

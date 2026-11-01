@@ -67,7 +67,7 @@ describe("opencode backend host config", () => {
     const xdg = writeHostConfig(root, "ses_test_ns", { authSourceDir: userDir });
 
     expect(JSON.parse(readFileSync(join(xdg, "muse", "settings.json"), "utf8")).run.toolset)
-      .toEqual(["mcp__opencode-loopback__*"]);
+      .toEqual(["mcp__opencode_loopback__*"]);
   });
 
   test("hostConfig.skipsMissingAuthWithoutReading", () => {

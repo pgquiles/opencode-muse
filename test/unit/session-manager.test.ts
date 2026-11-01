@@ -1202,10 +1202,10 @@ describe("rewind/fork anchors and explicit-cut fork", () => {
       const start = calls.find((call) => call.method === "session/start");
       expect(start?.params).toMatchObject({ approvalMode: "allowAll" });
       const servers = (start?.params.config as { mcpServers?: Record<string, { transport?: string; url?: string; headers?: Record<string, string>; mode?: string }> } | undefined)?.mcpServers;
-      expect(servers?.["opencode-loopback"]?.transport).toBe("streamableHttp");
-      expect(servers?.["opencode-loopback"]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp\//);
-      expect(servers?.["opencode-loopback"]?.headers?.Authorization).toMatch(/^Bearer [0-9a-f]{48}$/);
-      expect(servers?.["opencode-loopback"]?.mode).toBe("required");
+      expect(servers?.["opencode_loopback"]?.transport).toBe("streamableHttp");
+      expect(servers?.["opencode_loopback"]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp\//);
+      expect(servers?.["opencode_loopback"]?.headers?.Authorization).toMatch(/^Bearer [0-9a-f]{48}$/);
+      expect(servers?.["opencode_loopback"]?.mode).toBe("required");
       expect(String(hostOptions[0]?.env?.XDG_CONFIG_HOME ?? "")).toContain(join("hosts", "ses_oc_1"));
       expect(hostOptions[0]?.capabilities).toMatchObject({ requestedCapabilities: ["sessionMcp"] });
       expect(binding.sessionId).toMatch(/^ses_muse_/);

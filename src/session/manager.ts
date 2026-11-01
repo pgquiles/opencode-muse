@@ -654,7 +654,10 @@ export class MuseSessionManager {
   private backendSessionConfig(loopback: LoopbackMcpServer): Record<string, unknown> {
     return {
       mcpServers: {
-        "opencode-loopback": {
+        // Underscores, not hyphens: the CLI derives MCP tool names as
+        // mcp__<key>/... and a hyphenated key lists no tools (offline probe:
+        // hyphen key + hyphen glob fails the turn as configError).
+        "opencode_loopback": {
           transport: "streamableHttp",
           url: loopback.url,
           headers: { Authorization: `Bearer ${loopback.token}` },
