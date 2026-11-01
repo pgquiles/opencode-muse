@@ -63,9 +63,10 @@ function fakeRuntime(options: {
   joinParkedTurnId?: string;
   steerExpectedTurnId?: string;
   failTurnSteer?: boolean;
+  activeTurnId?: string;
   onDisarm?: () => void;
   streamEpoch?: number;
-  handoffLeaseToJoiner?: boolean;
+  handoffTakeovers?: number;
   emittedApprovalPrompts?: Set<string>;
   onCancelParked?: () => void;
   settleMatched?: string[];
@@ -163,8 +164,9 @@ function fakeRuntime(options: {
     contextError: options.contextError,
     joinParkedTurnId: options.joinParkedTurnId,
     steerExpectedTurnId: options.steerExpectedTurnId,
+    activeTurnId: options.activeTurnId,
     streamEpoch: options.streamEpoch,
-    handoffLeaseToJoiner: options.handoffLeaseToJoiner,
+    handoffTakeovers: options.handoffTakeovers,
     emittedApprovalPrompts: options.emittedApprovalPrompts,
     ...(options.onCancelParked ? { cancelParkedApprovals: async () => { options.onCancelParked?.(); } } : {}),
     async recordPendingCommand(command: { commandId: string; method: string }) {
@@ -329,6 +331,73 @@ describe("Muse LanguageModelV3 bridge", () => {
     expect(fake.commands.filter((command) => command.method === "turn/steer")).toHaveLength(1);
     expect(fake.commands.filter((command) => command.method === "turn/start")).toHaveLength(1);
     expect(fake.order.indexOf("turn/steer")).toBeLessThan(fake.order.indexOf("turn/start"));
+  });
+
+  test("languageModel.threeConcurrentDrainersReleaseExactlyOnce", async () => {
+    const fake = fakeRuntime({ events: textEvents("turn-1") });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const drain = async (result: { stream: ReadableStream }) => {
+      const reader = result.stream.getReader();
+      const parts: Array<Record<string, unknown>> = [];
+      while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        parts.push(next.value as unknown as Record<string, unknown>);
+      }
+      return parts;
+    };
+    const waitFor = async (predicate: () => boolean) => {
+      for (let attempt = 0; attempt < 500 && !predicate(); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      expect(predicate()).toBe(true);
+    };
+
+    // Call 1 starts the turn; calls 2 and 3 steer into it while it runs.
+    // Each submit proves that call already consumed the marker.
+    const first = await model.doStream(callOptions());
+    await waitFor(() => fake.commands.some((command) => command.method === "turn/start"));
+    fake.session.steerExpectedTurnId = "turn-1";
+    const second = await model.doStream(callOptions());
+    await waitFor(() => fake.commands.some((command) => command.method === "turn/steer"));
+    fake.session.steerExpectedTurnId = "turn-1";
+    const third = await model.doStream(callOptions());
+    await waitFor(() => fake.commands.filter((command) => command.method === "turn/steer").length === 2);
+    fake.session.steerExpectedTurnId = undefined;
+
+    const [firstParts, secondParts, thirdParts] = [await drain(first), await drain(second), await drain(third)];
+    for (const parts of [firstParts, secondParts, thirdParts]) {
+      expect(parts.map((part) => part.type)).toContain("finish");
+    }
+    // Teardown runs detached after the wrapper closes the stream at finish;
+    // wait for the last finisher's release instead of asserting mid-flight.
+    await fake.releasedPromise;
+    expect(fake.commands.filter((command) => command.method === "turn/start")).toHaveLength(1);
+    expect(fake.released).toBe(1);
+    expect(fake.session.handoffTakeovers ?? 0).toBe(0);
+  });
+
+  test("languageModel.skipsReleaseWhenANewerTurnOwnsTheLease", async () => {
+    // A newer turn started after this one finished: the lease already moved
+    // on, so the late teardown must not release it out from under the owner.
+    const fake = fakeRuntime({ events: textEvents(), activeTurnId: "turn-2" });
+    const model = createMuseLanguageModel(fake.runtime, modelID);
+    const result = await model.doStream(callOptions());
+    const reader = result.stream.getReader();
+    const parts: Array<Record<string, unknown>> = [];
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      parts.push(next.value as unknown as Record<string, unknown>);
+    }
+    expect(parts.map((part) => part.type)).toContain("finish");
+    for (let attempt = 0; attempt < 500 && fake.subscriptionReturns === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    expect(fake.subscriptionReturns).toBeGreaterThan(0);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fake.released).toBe(0);
+    expect(fake.session.handoffTakeovers ?? 0).toBe(0);
   });
 
   test("languageModel.preflightContextAndUnsupportedOptionsFailBeforeSessionResolution", async () => {
@@ -987,7 +1056,7 @@ describe("Muse LanguageModelV3 bridge", () => {
 
     expect(parts.map((part) => part.type)).toEqual(["stream-start", "text-start", "text-delta", "text-end", "finish"]);
     fake.session.streamEpoch = 8;
-    fake.session.handoffLeaseToJoiner = true;
+    fake.session.handoffTakeovers = 1;
     releaseGate();
     while (!(await reader.read()).done) {
       // Drain until the superseded stream closes.
@@ -1005,7 +1074,7 @@ describe("Muse LanguageModelV3 bridge", () => {
       await new Promise((resolve) => setTimeout(resolve, 1));
     }
     // The manager hands the lease to the joining call mid-turn.
-    fake.session.handoffLeaseToJoiner = true;
+    fake.session.handoffTakeovers = 1;
     await result.stream.getReader().cancel();
 
     expect(fake.commands.some((command) => command.method === "turn/interrupt")).toBe(false);

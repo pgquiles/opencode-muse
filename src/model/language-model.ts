@@ -53,6 +53,8 @@ export interface MuseTurnSession {
   recordPendingCommand?(input: { commandId: string; method: string; fingerprint: string }): Promise<void>;
   clearPendingCommand?(commandId: string): Promise<void>;
   recordTurnAccepted?(commandId: string, turnId: string): Promise<void>;
+  /** The manager clears this when the turn reaches a terminal state. */
+  activeTurnId?: string;
   updateCursor?(cursor: string): Promise<void>;
   recordTurnCompleted?(turnId: string, terminal: string, usage?: Record<string, unknown>): Promise<void>;
   release?(): Promise<void>;
@@ -72,8 +74,12 @@ export interface MuseTurnSession {
   steerExpectedTurnId?: string;
   /** Bumped by the manager when a newer call takes over this session's output. */
   streamEpoch?: number;
-  /** When true, the lease already moved to the joining call: detach, never interrupt or release. */
-  handoffLeaseToJoiner?: boolean;
+  /**
+   * Committed takeovers sharing the turn (verdict joins plus accepted
+   * steers). Finishers decrement; the last finisher releases the lease, so
+   * exactly one release runs no matter how many calls drain the turn.
+   */
+  handoffTakeovers?: number;
   /** Settle every still-pending approval verdict as denied (cancel path). */
   cancelParkedApprovals?(): Promise<void> | void;
 }
@@ -337,16 +343,16 @@ export async function runMuseTurn(
   session.steerExpectedTurnId = undefined;
   const steering = steerTarget !== undefined;
   if (!joinedTurn && !steering) {
-    // A fresh turn starts a new ownership epoch; stale handoff markers die
-    // here. Steers keep the re-entry handoff so both drainers share one
-    // lease release.
-    session.handoffLeaseToJoiner = false;
+    // A fresh turn resumes single ownership: stale takeover counts die here,
+    // bounding any leak from a join that never drained to one extra turn.
+    // Steers keep the re-entry count so all drainers share one lease release.
+    session.handoffTakeovers = 0;
   }
 
   const cancel = () => {
     if (cancelPromise) return cancelPromise;
     // A superseded stream detaches silently: the joining call owns the turn now.
-    if (!joinedTurn && session.handoffLeaseToJoiner) return Promise.resolve();
+    if (!joinedTurn && (session.handoffTakeovers ?? 0) > 0) return Promise.resolve();
     const denyParked = async () => {
       try {
         await session.cancelParkedApprovals?.();
@@ -416,9 +422,10 @@ export async function runMuseTurn(
           turnId = steerTarget;
           disposition = "steered";
           accepted = true;
+          session.handoffTakeovers = (session.handoffTakeovers ?? 0) + 1;
         } catch (error) {
           if (!(error instanceof MspCommandRejectedError)) throw error;
-          session.handoffLeaseToJoiner = false;
+          session.handoffTakeovers = 0;
         }
       }
       if (!accepted) {
@@ -496,10 +503,16 @@ export async function runMuseTurn(
           options.abortSignal?.removeEventListener("abort", onAbort);
           subscriptionController?.abort();
           await subscription?.return?.();
-          // The joining call owns the lease now; the superseded owner detaches
-          // without releasing. The first release wins; exactly one runs.
-          if (session.handoffLeaseToJoiner) session.handoffLeaseToJoiner = false;
-          else await session.release?.();
+          // Takeover accounting: every finisher except the last detaches
+          // without releasing. The last finisher releases only while no newer
+          // turn owns the lease — the wrapper closes the stream at finish
+          // while this teardown still runs detached, so a fast follow-up may
+          // have reused the lease already.
+          const takeovers = session.handoffTakeovers ?? 0;
+          if (takeovers > 0) session.handoffTakeovers = takeovers - 1;
+          else if (session.activeTurnId === undefined || session.activeTurnId === turnId) {
+            await session.release?.();
+          }
         }
       },
     };
@@ -540,8 +553,11 @@ export async function runMuseTurn(
         } finally {
           subscriptionController?.abort();
           await subscription?.return?.().catch(() => {});
-          if (session.handoffLeaseToJoiner) session.handoffLeaseToJoiner = false;
-          else await session.release?.().catch(() => {});
+          const takeovers = session.handoffTakeovers ?? 0;
+          if (takeovers > 0) session.handoffTakeovers = takeovers - 1;
+          else if (session.activeTurnId === undefined || session.activeTurnId === turnId) {
+            await session.release?.().catch(() => {});
+          }
         }
       })();
     } else if (!accepted) {

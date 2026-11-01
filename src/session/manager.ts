@@ -186,9 +186,11 @@ export class MuseSessionManager {
     // finisher detaches, the second releases.
     if (existingBinding) {
       existingBinding.steerExpectedTurnId = existingBinding.activeTurnId;
+      // The epoch bump marks the takeover for verdict flows; the takeover
+      // count itself is committed lazily by the bridge at steer-accept time,
+      // so a resolve that never drains cannot leak the lease.
       if (existingBinding.activeTurnId !== undefined) {
         existingBinding.streamEpoch = (existingBinding.streamEpoch ?? 0) + 1;
-        existingBinding.handoffLeaseToJoiner = true;
       }
     }
 
@@ -407,7 +409,7 @@ export class MuseSessionManager {
           binding.replayAfterCursor = undefined;
           binding.pendingCommands = {};
           binding.joinParkedTurnId = undefined;
-          binding.handoffLeaseToJoiner = false;
+          binding.handoffTakeovers = 0;
           binding.emittedApprovalPrompts = new Set<string>();
           try { await persist(); } catch (error) {
             binding.activeTurnId = previousActive;
@@ -498,7 +500,9 @@ export class MuseSessionManager {
     if (turnId === undefined || turnId !== binding.activeTurnId) return false;
     binding.joinParkedTurnId = turnId;
     binding.streamEpoch = (binding.streamEpoch ?? 0) + 1;
-    binding.handoffLeaseToJoiner = true;
+    // Committed eagerly: a verdict join always drains, so the joiner is a
+    // guaranteed extra finisher for the takeover count.
+    binding.handoffTakeovers = (binding.handoffTakeovers ?? 0) + 1;
     return true;
   }
 
@@ -802,7 +806,9 @@ export class MuseSessionManager {
     const binding = this.bindings.get(openCodeSessionId);
     if (!binding) return;
     binding.joinParkedTurnId = undefined;
-    binding.handoffLeaseToJoiner = false;
+    // Withdraw only the join that never attached; accepted steers keep
+    // their own accounting.
+    binding.handoffTakeovers = Math.max(0, (binding.handoffTakeovers ?? 0) - 1);
   }
 
   async close(): Promise<void> {

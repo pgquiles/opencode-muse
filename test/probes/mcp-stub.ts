@@ -71,11 +71,15 @@ export async function startMcpStub(callsDir: string, token: string): Promise<Mcp
   }
 
   const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    req.on("error", () => {});
+    res.on("error", () => {});
+    req.socket.on("error", () => {});
     if (req.headers.authorization !== `Bearer ${token}`) {
       res.writeHead(401).end();
       return;
     }
     let raw = "";
+    if (process.env.MCP_STUB_VERBOSE) process.stderr.write(`[mcp-stub] ${req.method} ${req.url}\n`);
     req.setEncoding("utf8");
     req.on("data", (c) => (raw += c));
     req.on("end", async () => {
@@ -100,6 +104,8 @@ export async function startMcpStub(callsDir: string, token: string): Promise<Mcp
       res.end(responses.map(frame).join(""));
     });
   });
+  server.on("error", (e) => process.stderr.write(`[mcp-stub] server error: ${String((e as Error)?.message ?? e)}\n`));
+  server.on("clientError", (_e, socket) => { try { socket.destroy(); } catch {} });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/mcp`;
   writeFileSync(join(callsDir, "ready"), "ready\n");

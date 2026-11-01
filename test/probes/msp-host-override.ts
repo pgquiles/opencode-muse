@@ -313,12 +313,62 @@ async function main(): Promise<void> {
       }
     }
 
+    // Check 5: steer into a parked turn. The MCP stub parks the tool call,
+    // so the turn stays open indefinitely; steer mid-park, release, and
+    // assert the steered text reaches the model in the same turn.
+    {
+      const host = await openHost();
+      try {
+        const sid = await startSession(host.connection);
+        const streams = (await host.connection.command("log/streams", { sessionId: sid })) as any;
+        const stream = (streams.streams ?? []).map((s: any) => s.stream).find((s: any) => s?.kind === "session") ?? { kind: "session", id: sid };
+        await host.connection.command("log/subscribe", { sessionId: sid, stream });
+        fake.queue(
+          () => reply({ text: "Working.", calls: [{ name: "mcp__probe.bash", args: { command: "sleep" }, id: "call_s" }] }),
+          () => reply({ text: "steered and done" }),
+        );
+        const before = fake.bodies.length;
+        const ack = (await host.connection.command("turn/start", { sessionId: sid, input: [{ type: "text", text: "steer me" }], reasoningEffort: "low" })) as any;
+        assert(typeof ack?.turnId === "string", "steer", "turn/start returned no turn id");
+        const parkedPath = join(callsDir, "calls.jsonl");
+        const parkDeadline = Date.now() + 60_000;
+        for (;;) {
+          if (Date.now() > parkDeadline) fail("steer", "tool call never parked on the stub");
+          try {
+            if (readFileSync(parkedPath, "utf8").includes('"callId":"call_s"')) break;
+          } catch { /* stub has not logged yet */ }
+          await new Promise((r) => setTimeout(r, 200));
+        }
+        await host.connection.command("turn/steer", {
+          sessionId: sid,
+          expectedTurnId: ack.turnId,
+          input: [{ type: "text", text: "actually do the other thing" }],
+        });
+        writeFileSync(join(callsDir, "call_s.json"), JSON.stringify({ text: "slept" }));
+        const fromIndex = host.collector.events.length;
+        const completed = await host.collector.waitFor(
+          (e) => e.method === "turn/completed" && (e.params.turnId === ack.turnId || (e.params.item as { turnId?: string } | undefined)?.turnId === ack.turnId),
+          fromIndex,
+          120_000,
+          "turn/completed after steer",
+        );
+        assert(completed.params.terminal === "completed", "steer", `turn ended ${completed.params.terminal}`);
+        assert(fake.bodies.length - before === 2, "steer", `expected continuation request, saw ${fake.bodies.length - before - 1} extra`);
+        const continued = JSON.stringify(fake.bodies[before + 1]);
+        assert(continued.includes("actually do the other thing"), "steer", "steered text never reached the model");
+        assert(continued.includes("call_s"), "steer", "tool result missing from the continued turn");
+      } finally {
+        await host.spawned.close().catch(() => {});
+        await host.spawned.exited.catch(() => {});
+      }
+    }
+
     await stub.close();
     await fake.close();
     console.log(JSON.stringify({
       ok: true,
       museVersion,
-      checks: { override: true, rawLog: true, resume: true, fork: true },
+      checks: { override: true, rawLog: true, resume: true, fork: true, steer: true },
     }));
   } finally {
     cleanup();
