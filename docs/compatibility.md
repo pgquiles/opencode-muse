@@ -156,7 +156,16 @@ How versions are represented and tested (policy #21): the supported contract is 
 
 Unrecorded CLI versions keep working under the warn policy; they appear here only after the migration procedure below classifies them.
 
+### Known, not probed
+
+Absence from the tables above means unprobed unless stated otherwise. Explicitly known gaps, so the next person does not re-ask:
+
+- OpenCode `2.2.0`–`2.2.7`: exist per GitHub releases (`sst/opencode`); #51 was reported on `2.2.0`. Never probed with the plugin. The `version-matrix.sh` harness fetches any of them on demand.
+- Muse CLI versions between ledger entries: not enumerated on purpose — no public version index exists, so anything not in the ledger is either unprobed or unknown to us. Do not guess version strings; the download channel only serves exact `1.4.20-R8619.1`-style versions.
+
 ## Migration Procedure (new Muse CLI)
+
+`test/probes/version-matrix.sh` automates the fetch, caching, and probing below (`probe-muse <full-version>` runs steps 1–5 plus one live turn per backend and prints a suggested row 6; `prune` keeps only ledger-referenced binaries). Prefer it over hand-rolled commands; the steps stay authoritative when the harness cannot run.
 
 1. Export the stable schema offline to an ephemeral directory: `muse schema generate-json-schema --out /tmp/opencode/muse-<version>-json`. Never commit the export.
 2. Append a snapshot entry: `bun run test/probes/msp-schema-diff.ts snapshot --export /tmp/opencode/muse-<version>-json --cli-version <version> --provenance <text>`, then add the printed JSON to `etc/msp-schema/snapshots.json`.
