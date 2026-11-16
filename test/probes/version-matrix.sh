@@ -7,7 +7,11 @@
 # versions come from GitHub releases the same way.
 #
 # Subcommands:
-#   fetch-muse <full-version>        ensure a Muse CLI binary is cached (e.g. 1.4.14-R7309.1)
+#   fetch-muse <full-version>        ensure a Muse CLI binary is cached (e.g. 1.4.14-R7309.1).
+#     Discovery: no public CLI version index exists; `npm view @muse-code/sdk
+#     versions` (+ `time`) lists SDK generations that imply same-numbered CLI
+#     generations, but downloads need the full R-suffixed string from the
+#     ledger, release notes, or `muse --version` before upgrade.
 #   fetch-opencode [--local PATH] <version>
 #       ensure an OpenCode binary is cached (e.g. 2.3.0);
 #       --local caches an installed binary for versions no channel serves
