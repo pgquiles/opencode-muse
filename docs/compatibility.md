@@ -161,7 +161,7 @@ Unrecorded CLI versions keep working under the warn policy; they appear here onl
 Absence from the tables above means unprobed unless stated otherwise. Explicitly known gaps, so the next person does not re-ask:
 
 - OpenCode `2.2.0`–`2.2.7`: exist per GitHub releases (`sst/opencode`); #51 was reported on `2.2.0`. Never probed with the plugin. The `version-matrix.sh` harness fetches any of them on demand.
-- Muse CLI versions between ledger entries: not enumerated on purpose — no public version index exists, so anything not in the ledger is either unprobed or unknown to us. Do not guess version strings; the download channel only serves exact `1.4.20-R8619.1`-style versions.
+- Muse CLI generations known only from SDK publishes (no ledger entry, build number unknown, unprobed): `1.4.2`, `1.4.4`, `1.4.6`, `1.4.7`, `1.4.8`, `1.4.9`, `1.4.10`, `1.4.15` — per `npm view @muse-code/sdk versions` (+ `time` for dates; e.g. 1.4.15 published 2026-11-10). Each SDK 1.4.x implies a same-numbered CLI generation exists (fingerprints matched 1:1 everywhere checked), but the `Rxxxx` build suffix needed for downloads is in neither the SDK package nor resolvable in short form, so these stay unprobed until a full version string surfaces (ledger, release notes, or `muse --version` before upgrade). Pre-1.4 SDK lines are untracked.
 
 ## Migration Procedure (new Muse CLI)
 
