@@ -9,6 +9,7 @@ import { notificationCursorKey } from "../msp/notification.js";
 import {
   approvalStageKey,
   renderConversationalApprovalPrompt,
+  type ApprovalSubjectInfo,
   type ConversationalChoice,
 } from "../msp/approvals.js";
 import {
@@ -92,7 +93,7 @@ export class MuseStreamMapper {
     private readonly approvalChoices?: (
       approvalId: string,
       requirementId: string,
-    ) => { choices: ConversationalChoice[]; toolName?: string } | undefined,
+    ) => { choices: ConversationalChoice[]; toolName?: string; subject?: ApprovalSubjectInfo; rawArgs?: string; reviewerReason?: string } | undefined,
     private readonly userInputQuestion?: (
       userInputId: string,
     ) => { question: UserInputQuestion; toolName?: string } | undefined,
@@ -177,7 +178,14 @@ export class MuseStreamMapper {
     const choices = described?.choices ?? [];
     const toolName = described?.toolName ?? (typeof params.toolName === "string" ? params.toolName : undefined);
     const prompt = choices.length > 0
-      ? renderConversationalApprovalPrompt({ toolName, choices, attempt: 0 })
+      ? renderConversationalApprovalPrompt({
+          toolName,
+          choices,
+          attempt: 0,
+          subject: described?.subject,
+          rawArgs: described?.rawArgs,
+          reviewerReason: described?.reviewerReason,
+        })
       : `**Approval needed** (opencode-muse bridge message, not the model): Muse requested approval${toolName ? ` to run \`${toolName}\`` : ""} but offered no presentable options; the parked turn denies on timeout. Re-prompt to try again.`;
     const itemId = `approval-${approvalId}`;
     this.textParts.push({ type: "text", text: prompt });

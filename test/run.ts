@@ -26,6 +26,8 @@ import "./unit/session-manager.test.ts";
 import "./unit/meta-request.test.ts";
 import "./unit/fingerprint.test.ts";
 import "./unit/tool-backend.test.ts";
+import "./unit/approval-mode.test.ts";
+import "./unit/approval-subject.test.ts";
 import "./unit/host-config.test.ts";
 import "./unit/loopback-mcp.test.ts";
 import "./integration/turn-bridge.test.ts";

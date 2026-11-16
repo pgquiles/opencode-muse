@@ -32,6 +32,12 @@ import {
   resolveToolBackend,
   type ToolBackend,
 } from "./msp/tool-backend.js";
+import {
+  APPROVAL_MODE_ENV,
+  APPROVAL_MODE_OPTION,
+  resolveApprovalMode,
+  type ApprovalModeSetting,
+} from "./msp/approval-mode.js";
 type ProviderEditor = Parameters<Parameters<Plugin.Context["provider"]["transform"]>[0]>[0];
 
 export type MuseProviderContext = Pick<Plugin.Context, "provider" | "session" | "aisdk" | "options"> & {
@@ -45,6 +51,7 @@ export interface SessionManagerBase {
   museBin?: string;
   contributorMode: ContributorMode;
   toolBackend: ToolBackend;
+  approvalMode: ApprovalModeSetting;
 }
 
 export interface ProviderPluginDependencies {
@@ -116,8 +123,22 @@ export async function createProviderPlugin(
   const toolBackend = resolveToolBackend(
     ctx.options?.[TOOL_BACKEND_OPTION] ?? process.env[TOOL_BACKEND_ENV],
   );
+  // Approval mode: an explicit plugin option wins, then the namespaced env
+  // var, otherwise the vetted default ("onRequest"). "host-default" omits
+  // approvalMode from session/start so the user's Muse permission profile
+  // applies instead of being silently overridden. Anything else fails closed
+  // before any serve child starts. The opencode backend ignores it (#37).
+  const approvalMode = resolveApprovalMode(
+    ctx.options?.[APPROVAL_MODE_OPTION] ?? process.env[APPROVAL_MODE_ENV],
+  );
   if (toolBackend === "opencode") {
     console.warn("opencode-muse: OpenCode tools backend is enabled (OPENCODE_MUSE_TOOL_BACKEND=opencode): Muse runs host-provided tools through the loopback bridge; OpenCode permissions apply. Approval review: #37.");
+  } else if (approvalMode !== "onRequest") {
+    console.warn(
+      approvalMode === "host-default"
+        ? "opencode-muse: Muse-backend sessions omit approvalMode (OPENCODE_MUSE_APPROVAL_MODE=host-default): the Muse host's configured permission profile applies."
+        : `opencode-muse: Muse-backend sessions select approvalMode "${approvalMode}" (OPENCODE_MUSE_APPROVAL_MODE).`,
+    );
   }
   const paygNotice = paygBillingNotice();
   if (paygNotice) console.warn(`opencode-muse: ${paygNotice}`);
@@ -135,6 +156,7 @@ export async function createProviderPlugin(
     museBin,
     contributorMode,
     toolBackend,
+    approvalMode,
   };
   const sessions = dependencies.createSessionManager?.(managerBase) ?? new MuseSessionManager(managerBase);
   const registration = await ctx.provider.transform((providers: ProviderEditor) => {

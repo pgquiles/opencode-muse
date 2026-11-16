@@ -12,7 +12,7 @@ const modelId = process.env.MUSE_PROBE_MODEL;
 const homeParent = process.env.MUSE_PROBE_HOME_PARENT ?? tmpdir();
 if (provider === "echo") mkdirSync(homeParent, { recursive: true });
 const isolatedHome = provider === "echo" ? mkdtempSync(join(homeParent, "opencode-muse-probe-home-")) : undefined;
-const workspaceRoot = process.env.MUSE_PROBE_WORKSPACE ?? (isolatedHome ? join(isolatedHome, "workspace") : "/tmp/opencode/muse-lifecycle-probe");
+const workspaceRoot = process.env.MUSE_PROBE_WORKSPACE ?? (isolatedHome ? join(isolatedHome, "workspace") : join(tmpdir(), "opencode", "muse-lifecycle-probe"));
 const runId = (process.env.MUSE_PROBE_RUN_ID ?? new Date().toISOString())
   .toLowerCase()
   .replace(/[^a-z0-9]+/g, "-")

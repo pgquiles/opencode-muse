@@ -9,6 +9,7 @@ import {
   APPROVAL_BRIDGE_INSTRUCTION,
   matchConversationalChoice,
   renderConversationalApprovalPrompt,
+  type ApprovalSubjectInfo,
   type ConversationalChoice,
 } from "../msp/approvals.js";
 import {
@@ -48,6 +49,7 @@ import {
 import { SessionRegistry } from "./registry.js";
 import type { PendingCommandRecord, SessionRegistryEntry, TurnAnchor } from "./registry.js";
 import type { ToolBackend } from "../msp/tool-backend.js";
+import { approvalModeWireValue, type ApprovalModeSetting } from "../msp/approval-mode.js";
 import { sweepHostConfigs, userMuseConfigDir, writeHostConfig } from "../msp/host-config.js";
 import { LoopbackMcpServer, type ParkedCall } from "../mcp/loopback.js";
 import type { LockLease, WorkspaceLock } from "./workspace-lock.js";
@@ -86,6 +88,13 @@ export interface MuseSessionManagerOptions {
   contributorMode?: ContributorMode;
   /** Tool backend; defaults to "muse" (vetted Shape B). "opencode" is explicit opt-in (#37). */
   toolBackend?: ToolBackend;
+  /**
+   * Muse-backend approval posture; defaults to "onRequest" (the historical
+   * forced mode). "host-default" omits approvalMode from session/start so the
+   * Muse host's configured permission profile applies. Ignored by the
+   * opencode backend, which always selects allowAll (#37).
+   */
+  approvalMode?: ApprovalModeSetting;
   createHost?(options: { museBin?: string; cwd: string; args: readonly string[]; env?: NodeJS.ProcessEnv; capabilities?: Parameters<MspHandshake["initialize"]>[0]["capabilities"] }): Promise<MuseSessionHost>;
   videoChunkBytes?: number;
   /** Worktree lifecycle seam (#34); defaults to git. */
@@ -154,6 +163,7 @@ export class MuseSessionManager {
   private readonly contextBySession = new Map<string, AgentContextResult>();
   private readonly contributorMode: ContributorMode;
   private readonly toolBackend: ToolBackend;
+  private readonly approvalMode: ApprovalModeSetting;
   private readonly createHost: NonNullable<MuseSessionManagerOptions["createHost"]>;
   private readonly worktreeVcs: WorktreeVcs;
   private closed = false;
@@ -161,6 +171,7 @@ export class MuseSessionManager {
   constructor(private readonly options: MuseSessionManagerOptions) {
     this.contributorMode = options.contributorMode ?? "on";
     this.toolBackend = options.toolBackend ?? "muse";
+    this.approvalMode = options.approvalMode ?? "onRequest";
     this.worktreeVcs = options.worktreeVcs ?? defaultWorktreeVcs;
     this.createHost = options.createHost ?? (async ({ museBin, cwd, args, env, capabilities }) => MspHost.start({
       museBin,
@@ -376,18 +387,24 @@ export class MuseSessionManager {
           }
         }
       } else if (!adoptedFork) {
+        // Muse backend (#22): Muse must ask through approval/request so
+        // OpenCode stays in the loop; the host default would let
+        // side-effectful actions through silently. The user can opt out of
+        // the forced mode with approvalMode "host-default" (their Muse
+        // permission profile then applies) or select another host-defined
+        // mode explicitly. Opencode backend (#37): Muse never asks —
+        // OpenCode's native permission evaluation is the only fence, so a
+        // second Muse-side prompt would double-ask at best and hang at
+        // worst; the knob never weakens that.
+        const sessionApprovalMode = this.toolBackend === "opencode"
+          ? "allowAll"
+          : approvalModeWireValue(this.approvalMode);
         const startParams = {
           commandId: host.mintCommandId(),
           workspaceRoot: canonicalDirectory,
           providerId: selected.providerId,
           modelId: selected.modelId,
-          // Muse backend (#22): Muse must ask through approval/request so
-          // OpenCode stays in the loop; the host default would let
-          // side-effectful actions through silently. Opencode backend (#37):
-          // Muse never asks — OpenCode's native permission evaluation is the
-          // only fence, so a second Muse-side prompt would double-ask at
-          // best and hang at worst.
-          approvalMode: this.toolBackend === "opencode" ? "allowAll" : "onRequest",
+          ...(sessionApprovalMode === undefined ? {} : { approvalMode: sessionApprovalMode }),
           ...(backendConfig ? { config: backendConfig } : {}),
         };
         let start: Record<string, unknown>;
@@ -898,6 +915,9 @@ export class MuseSessionManager {
           choices: oldest.choices,
           attempt: 1,
           received: text,
+          subject: oldest.subject,
+          rawArgs: oldest.rawArgs,
+          reviewerReason: oldest.reviewerReason,
         }),
         settledLast: false,
       };
@@ -926,6 +946,9 @@ export class MuseSessionManager {
         toolName: next.toolName,
         choices: next.choices,
         attempt: 0,
+        subject: next.subject,
+        rawArgs: next.rawArgs,
+        reviewerReason: next.reviewerReason,
       })}`,
       settledLast: false,
     };
@@ -1007,7 +1030,7 @@ export class MuseSessionManager {
     openCodeSessionId: string,
     approvalId: string,
     requirementId: string,
-  ): { choices: ConversationalChoice[]; toolName?: string } | undefined {
+  ): { choices: ConversationalChoice[]; toolName?: string; subject?: ApprovalSubjectInfo; rawArgs?: string; reviewerReason?: string } | undefined {
     const binding = this.bindings.get(openCodeSessionId);
     const found = binding?.host.approvals.describePending().find((entry) =>
       entry.approvalId === approvalId && entry.requirementId === requirementId
@@ -1016,6 +1039,9 @@ export class MuseSessionManager {
     return {
       choices: found.choices,
       ...(found.toolName ? { toolName: found.toolName } : {}),
+      ...(found.subject !== undefined ? { subject: found.subject } : {}),
+      ...(found.rawArgs !== undefined ? { rawArgs: found.rawArgs } : {}),
+      ...(found.reviewerReason !== undefined ? { reviewerReason: found.reviewerReason } : {}),
     };
   }
 

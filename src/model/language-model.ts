@@ -27,6 +27,7 @@ import {
 import { MuseStreamMapper, resultUsage } from "./stream.js";
 import type { MuseModelSelection, RequestContext } from "../types.js";
 import type { UserInputQuestion as UserInputQuestionShape } from "../msp/user-input.js";
+import type { ApprovalSubjectInfo, ConversationalChoice } from "../msp/approvals.js";
 import type { TranscribeAudio } from "../msp/transcribe.js";
 import { pendingFirstTurnNotices, resolveStagingRoot } from "../msp/worktree.js";
 import type { StagePdfOutcome } from "../msp/pdf.js";
@@ -138,7 +139,7 @@ export interface MuseLanguageRuntime {
   hasParkedApprovals?(sessionID: string): boolean | Promise<boolean>;
   disarmParkedJoin?(sessionID: string): void;
   consumeConversationalVerdict?(sessionID: string, text: string): Promise<{ text: string; settledLast: boolean; runMessageAsTurn?: boolean } | null>;
-  describePendingApproval?(sessionID: string, approvalId: string, requirementId: string): { choices: Array<{ choiceId: string; label: string; scope: string }>; toolName?: string } | undefined;
+  describePendingApproval?(sessionID: string, approvalId: string, requirementId: string): { choices: ConversationalChoice[]; toolName?: string; subject?: ApprovalSubjectInfo; rawArgs?: string; reviewerReason?: string } | undefined;
   consumeConversationalAnswer?(sessionID: string, text: string): Promise<{ text: string; settledLast: boolean } | null>;
   describeCurrentUserInputQuestion?(sessionID: string): { question: UserInputQuestionShape; toolName?: string } | undefined;
   /** Audio attachment transcription (#32); absent preserves the unsupported-media rejection. */

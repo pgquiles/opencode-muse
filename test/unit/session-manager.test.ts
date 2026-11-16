@@ -10,6 +10,7 @@ import { MspCommandRejectedError, MspCommandTimeoutError, MuseInvalidConfigError
 import { ApprovalExchange } from "../../src/msp/approvals.js";
 import { UserInputExchange } from "../../src/msp/user-input.js";
 import type { ContributorMode } from "../../src/msp/contributor.js";
+import type { ApprovalModeSetting } from "../../src/msp/approval-mode.js";
 import type { RequestContext } from "../../src/types.js";
 
 const roots: string[] = [];
@@ -55,6 +56,7 @@ function managerAt(
   contributorMode?: ContributorMode,
   toolBackend?: "muse" | "opencode",
   rejectCommands?: Record<string, { code: number; kind: string }>,
+  approvalMode?: ApprovalModeSetting,
 ) {
   let id = 0;
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -69,6 +71,7 @@ function managerAt(
     workspaceLock: workspaceLockOverride ?? new WorkspaceLock({ stateDirectory: root }),
     contributorMode,
     toolBackend,
+    approvalMode,
     async createHost(options) {
       hostOptions.push(options as unknown as Record<string, unknown>);
       const record = { closeCount: 0 };
@@ -1363,5 +1366,56 @@ describe("rewind/fork anchors and explicit-cut fork", () => {
     expect(calls.filter((call) => call.method === "session/start")).toHaveLength(1);
     expect(calls.filter((call) => call.method === "session/fork")).toHaveLength(0);
     await manager.close();
+  });
+});
+
+describe("MuseSessionManager approval mode", () => {
+  test("sessionManager.museBackendHostDefaultOmitsApprovalMode", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const { manager, calls } = managerAt(root, false, false, undefined, undefined, undefined, undefined, undefined, undefined, "host-default");
+    const binding = await manager.resolveSession(context("ses_oc_1", directory));
+
+    const start = calls.find((call) => call.method === "session/start");
+    expect(start).toBeDefined();
+    expect("approvalMode" in (start?.params ?? {})).toBe(false);
+    await binding.release?.();
+    await manager.close();
+  });
+
+  test("sessionManager.museBackendExplicitModesAreSelectedVerbatim", async () => {
+    for (const mode of ["allowAll", "promptUnmatched", "denyUnmatched", "onRequest"] as const) {
+      const root = tempRoot();
+      const directory = join(root, "project");
+      mkdirSync(directory);
+      const { manager, calls } = managerAt(root, false, false, undefined, undefined, undefined, undefined, undefined, undefined, mode);
+      const binding = await manager.resolveSession(context("ses_oc_1", directory));
+
+      const start = calls.find((call) => call.method === "session/start");
+      expect(start?.params).toMatchObject({ approvalMode: mode });
+      await binding.release?.();
+      await manager.close();
+    }
+  });
+
+  test("sessionManager.opencodeBackendKeepsAllowAllRegardlessOfKnob", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    try {
+      const { manager, calls } = managerAt(root, false, false, undefined, undefined, undefined, undefined, "opencode", undefined, "host-default");
+      const binding = await manager.resolveSession(context("ses_oc_1", directory));
+
+      const start = calls.find((call) => call.method === "session/start");
+      expect(start?.params).toMatchObject({ approvalMode: "allowAll" });
+      await binding.release?.();
+      await manager.close();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
   });
 });
