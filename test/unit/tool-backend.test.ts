@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { MuseInvalidConfigError } from "../../src/errors.js";
 import {
   TOOL_BACKEND_ENV,
+  checkOpencodeBackendCliSupport,
   resolveToolBackend,
 } from "../../src/msp/tool-backend.js";
+
+const FINGERPRINT_1_4_14 = "sha256:c94c3d1f2f51e6424074b9ec43eac3eedcf532d3dcd77351ec1383a87d3049c6";
+const FINGERPRINT_1_4_20 = "sha256:283b1b125dcc9172928fb5d6711a92a353796d030a7c186988ed527a13cf07f0";
 
 describe("toolBackend option", () => {
   test("toolBackend.defaultsToMuseWhenUnset", () => {
@@ -30,6 +34,37 @@ describe("toolBackend option", () => {
 
   test("toolBackend.envNameIsNamespaced", () => {
     expect(TOOL_BACKEND_ENV).toBe("OPENCODE_MUSE_TOOL_BACKEND");
+  });
+});
+
+describe("opencodeBackendCliSupport", () => {
+  test("cliSupport.admitsVerifiedFingerprint", () => {
+    expect(() => checkOpencodeBackendCliSupport(FINGERPRINT_1_4_14)).not.toThrow();
+  });
+
+  test("cliSupport.rejectsUnverifiedFingerprint", () => {
+    let error: unknown;
+    try {
+      checkOpencodeBackendCliSupport(FINGERPRINT_1_4_20);
+    } catch (reason) {
+      error = reason;
+    }
+    expect(error).toBeInstanceOf(MuseInvalidConfigError);
+    expect(String((error as Error).message)).toContain("opencode tool backend");
+    expect(String((error as Error).message)).toContain(FINGERPRINT_1_4_20);
+    expect(String((error as Error).message)).toContain("issues/58");
+  });
+
+  test("cliSupport.rejectsMissingOrMalformedFingerprint", () => {
+    for (const raw of [undefined, null, "", 42, {}]) {
+      let error: unknown;
+      try {
+        checkOpencodeBackendCliSupport(raw);
+      } catch (reason) {
+        error = reason;
+      }
+      expect(error).toBeInstanceOf(MuseInvalidConfigError);
+    }
   });
 });
 

@@ -48,7 +48,7 @@ import {
 } from "../errors.js";
 import { SessionRegistry } from "./registry.js";
 import type { PendingCommandRecord, SessionRegistryEntry, TurnAnchor } from "./registry.js";
-import type { ToolBackend } from "../msp/tool-backend.js";
+import { checkOpencodeBackendCliSupport, type ToolBackend } from "../msp/tool-backend.js";
 import { approvalModeWireValue, type ApprovalModeSetting } from "../msp/approval-mode.js";
 import { sweepHostConfigs, userMuseConfigDir, writeHostConfig } from "../msp/host-config.js";
 import { LoopbackMcpServer, type ParkedCall } from "../mcp/loopback.js";
@@ -319,6 +319,14 @@ export class MuseSessionManager {
       });
       const durability = host.initializeResult.sessionDurability;
       if (stored && durability === "ephemeral") throw new MuseRecoveryChoiceRequiredError();
+      if (this.toolBackend === "opencode") {
+        // Fail fast on CLIs whose run.toolset rejects session MCP servers
+        // (#58: 1.4.20 fails every tool turn; without the pin MCP tools
+        // never load). The catch below closes the host/loopback and releases
+        // the lease, so this never strands a half-built binding.
+        const schema = host.initializeResult.schema as { fingerprint?: unknown } | undefined;
+        checkOpencodeBackendCliSupport(schema?.fingerprint);
+      }
 
       const experimentalWorktrees = host.initializeResult.experimentalApi === true;
       let museSessionId: string | undefined;

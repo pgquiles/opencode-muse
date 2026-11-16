@@ -8,6 +8,7 @@ import { WorkspaceLock } from "../../src/session/workspace-lock.js";
 import { MuseSessionManager } from "../../src/session/manager.js";
 import { MspCommandRejectedError, MspCommandTimeoutError, MuseInvalidConfigError, WorkspaceBusyError, MuseRecoveryChoiceRequiredError } from "../../src/errors.js";
 import { ApprovalExchange } from "../../src/msp/approvals.js";
+import { OPENCODE_BACKEND_VERIFIED_FINGERPRINTS } from "../../src/msp/tool-backend.js";
 import { UserInputExchange } from "../../src/msp/user-input.js";
 import type { ContributorMode } from "../../src/msp/contributor.js";
 import type { ApprovalModeSetting } from "../../src/msp/approval-mode.js";
@@ -57,6 +58,7 @@ function managerAt(
   toolBackend?: "muse" | "opencode",
   rejectCommands?: Record<string, { code: number; kind: string }>,
   approvalMode?: ApprovalModeSetting,
+  servedSchema?: { fingerprint: string } | null,
 ) {
   let id = 0;
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -81,7 +83,14 @@ function managerAt(
       const userInput = new UserInputExchange({ timeoutMs: 50 });
       userExchanges.push(userInput);
       return {
-        initializeResult: { sessionDurability: "durable" },
+        initializeResult: {
+          sessionDurability: "durable",
+          // The fake emulates a supported host: verified CLI fingerprint
+          // unless a test overrides it (null omits the schema member).
+          ...(servedSchema === null
+            ? {}
+            : { schema: servedSchema ?? { fingerprint: [...OPENCODE_BACKEND_VERIFIED_FINGERPRINTS][0] } }),
+        },
         mintCommandId: () => `018f4f17-9c2a-7c1a-a0fd-67a19db5d1${String(id++).padStart(2, "0")}`,
         approvals,
         userInput,
@@ -1351,6 +1360,72 @@ describe("rewind/fork anchors and explicit-cut fork", () => {
     expect(binding.sessionId).toMatch(/^ses_muse_/);
     await binding.release?.();
     await manager.close();
+  });
+
+  test("sessionManager.opencodeBackendRejectsUnverifiedCliFingerprint", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    try {
+      const { manager, calls, hosts } = managerAt(root, false, false, undefined, undefined, undefined, undefined, "opencode", undefined, undefined, {
+        fingerprint: "sha256:283b1b125dcc9172928fb5d6711a92a353796d030a7c186988ed527a13cf07f0",
+      });
+      const error = await manager.resolveSession(context("ses_oc_1", directory)).then(
+        () => undefined,
+        (reason: unknown) => reason,
+      );
+      expect(error).toBeInstanceOf(MuseInvalidConfigError);
+      expect(String((error as Error).message)).toContain("opencode tool backend");
+      expect(String((error as Error).message)).toContain("sha256:283b1b125dcc9172928fb5d6711a92a353796d030a7c186988ed527a13cf07f0");
+      expect(String((error as Error).message)).toContain("issues/58");
+      expect(calls.filter((call) => call.method === "session/start")).toHaveLength(0);
+      expect(hosts[0]?.closeCount).toBe(1);
+      await manager.close();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+  });
+
+  test("sessionManager.opencodeBackendRejectsMissingSchemaFingerprint", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    try {
+      const { manager, calls } = managerAt(root, false, false, undefined, undefined, undefined, undefined, "opencode", undefined, undefined, null);
+      const error = await manager.resolveSession(context("ses_oc_1", directory)).then(
+        () => undefined,
+        (reason: unknown) => reason,
+      );
+      expect(error).toBeInstanceOf(MuseInvalidConfigError);
+      expect(calls.filter((call) => call.method === "session/start")).toHaveLength(0);
+      await manager.close();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+  });
+
+  test("sessionManager.opencodeBackendAdmitsVerifiedCliFingerprint", async () => {
+    const root = tempRoot();
+    const directory = join(root, "project");
+    mkdirSync(directory);
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    try {
+      const { manager, calls } = managerAt(root, false, false, undefined, undefined, undefined, undefined, "opencode");
+      const binding = await manager.resolveSession(context("ses_oc_1", directory));
+      expect(calls.filter((call) => call.method === "session/start")).toHaveLength(1);
+      await binding.release?.();
+      await manager.close();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
   });
 
   test("sessionManager.ambiguousTranscriptStaysFresh", async () => {
